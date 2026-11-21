@@ -1,10 +1,10 @@
-# 手動の受け入れ確認（AC-W1〜W5）
+# 手動の受け入れ確認（AC-W1〜W5。W3 は欠番）
 
 SPEC §11 の手動の受け入れ基準を、Windows の実機で行うための手順書です。**人間が実行します。** 開発用の Claude Code は、レジストリの登録、拡張のインストール、Thunderbird の起動を行いません。
 
 ## 先に決めておくこと
 
-- **テスト用のアカウントとメールで行う**（実際の受信箱では行わない）。AC-W3 は、拡張が拒否しなかった場合に、メールを本当に移動させる確認です。
+- **テスト用のアカウントとメールで行う**（実際の受信箱では行わない）。
 - 開発用の Claude Code（このリポジトリ）では、実際の `mcp__thunderbird` ツールを deny にしています（S-13）。ツールを使う確認は、**別のプロジェクト**の Claude Code で行ってください。
 - 前提: Thunderbird 140 以上（`strict_min_version`）、リポジトリで `uv sync` 済み。
 - 手順の途中で、想定と違う表示や挙動があれば、**そこで止めて**、その画面の内容と一緒に報告してください（SPEC の未確認事項を直す材料になります）。
@@ -40,14 +40,9 @@ SPEC §11 の手動の受け入れ基準を、Windows の実機で行うため�
    - 「送信トレイ」は空のまま、「送信済み」にも現れない。
 4. 控えるもの: 作成ウィンドウが残ったか、下書きがどのフォルダに入ったか。
 
-## AC-W3: Python の検査を迂回しても、JS が拒否する
+## AC-W3: 欠番
 
-1. フォルダの ID を確かめる: `uv run python scripts/bridge_probe.py folders`
-2. テスト用メールの ID を、別のプロジェクトの Claude Code の `search_messages` で調べる（ID は Thunderbird を再起動すると変わります）。
-3. 次を、`--special-use` を `bin`、`unwanted`、`pending_out`、`drafts` に変えて、それぞれ実行する:
-   `uv run python scripts/bridge_probe.py move --message-id <ID> --special-use bin --yes`
-4. 期待する結果: 毎回 `RESULT: the extension refused the move (expected for AC-W3).` と出て、終了コードが 0。メールは動かない。
-5. `WARNING - the extension did NOT refuse the move` が出たら: **メールを元のフォルダへ戻し**、出力をそのまま報告する（拡張の不具合です）。
+2026-11-21 に `move_messages` を外したため、この確認はありません（SPEC §13）。
 
 ## AC-W4: 権限ダイアログに、削除と送出の権限が出ない
 

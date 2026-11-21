@@ -56,7 +56,6 @@ def harness_output():
         "backgroundPath": str(BACKGROUND),
         "forbiddenOps": [f"{area}.{term}" for area in ("messages", "compose", "folders", "accounts")
                          for term in safety.FORBIDDEN_TERMS],
-        "deniedSpecialUses": sorted(safety.DENIED_SPECIAL_USES),
         "dollarKeys": sorted(key for key in safety.DANGEROUS_TAG_KEYS if key.startswith("$")),
         "chunkedDraftRequest": _chunked_request(),
         "chunkedDraftBodyLength": len(DRAFT_BODY),

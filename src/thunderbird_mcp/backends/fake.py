@@ -170,12 +170,6 @@ class FakeBackend(MailBackend):
             tags.extend(t for t in add if t not in tags)
             self._messages[message_id] = dataclasses.replace(summary, tags=tuple(tags))
 
-    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> None:
-        self.calls.append("move_messages")
-        if destination_folder_id not in self._folders:
-            raise KeyError(destination_folder_id)
-        self._update(message_ids, folder_id=destination_folder_id)
-
     def save_draft(self, draft: DraftRequest) -> DraftResult:
         self.calls.append("save_draft")
         folder = next((f for f in self._folders.values() if safety.SU_DRAFTS in f.special_use), None)

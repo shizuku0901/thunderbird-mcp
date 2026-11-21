@@ -46,7 +46,6 @@ ALLOWED_OPS = (
     "messages.flag",
     "tags.update",
     "tags.list",
-    "messages.move",
     "drafts.create",
     "health",
 )

@@ -28,7 +28,7 @@ EXPECTED_TOOLS = (
 EXPECTED_BACKEND_METHODS = frozenset({
     "list_accounts", "list_folders", "get_folder", "search_messages", "list_messages",
     "get_message", "list_attachments", "read_attachment", "set_read", "set_flagged",
-    "list_tags", "update_tags", "move_messages", "save_draft", "health",
+    "list_tags", "update_tags", "save_draft", "health",
 })
 
 

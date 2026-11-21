@@ -23,11 +23,7 @@ function makeEnv(opts = {}) {
     { id: "f-inbox", accountId: "a1", name: "Inbox", path: "/Inbox", specialUse: ["inbox"] },
     { id: "f-arch", accountId: "a1", name: "Archives", path: "/Archives", specialUse: ["archives"] },
     { id: "f-proj", accountId: "a1", name: "Projects", path: "/Projects", specialUse: [] },
-    { id: "f-mixed", accountId: "a1", name: "Mixed", path: "/Mixed", specialUse: ["archives", input.deniedSpecialUses[0]] },
     { id: "f-custom", accountId: "a1", name: "Custom", path: "/Custom", specialUse: ["x-custom"] },
-    ...input.deniedSpecialUses.map((use, i) => ({
-      id: `f-su-${i}`, accountId: "a1", name: `Special${i}`, path: `/Special${i}`, specialUse: [use],
-    })),
   ];
   const tags = [
     { key: "$label1", tag: "Important", color: "#f00" },
@@ -131,7 +127,7 @@ await scenario("J-1 connects to the native host by name", async () => {
   return env.calls.some((c) => c[0] === "runtime.connectNative" && c[1] === "thunderbird_mcp_host");
 });
 
-for (const op of [...input.forbiddenOps, "", "health ", "constructor", "__proto__", "toString"]) {
+for (const op of [...input.forbiddenOps, "messages.move", "", "health ", "constructor", "__proto__", "toString"]) {
   await scenario(`J-1 refuses op ${JSON.stringify(op)}`, async () => {
     const env = makeEnv();
     const response = await env.request(op, {});
@@ -166,35 +162,6 @@ await scenario("J-2 non-boolean flags are refused", async () => {
   return refused(a) && refused(b) && env.writes().length === 0;
 });
 
-// --- J-3: move destination -------------------------------------------------------------------
-for (let i = 0; i < input.deniedSpecialUses.length; i++) {
-  await scenario(`J-3 refuses special use ${input.deniedSpecialUses[i]}`, async () => {
-    const env = makeEnv();
-    const response = await env.request("messages.move", { message_ids: ["1"], destination_folder_id: `f-su-${i}` });
-    return refused(response) && env.writes().length === 0;
-  });
-}
-for (const folderId of ["f-mixed", "f-custom"]) {
-  await scenario(`J-3 refuses ${folderId}`, async () => {
-    const env = makeEnv();
-    const response = await env.request("messages.move", { message_ids: ["1"], destination_folder_id: folderId });
-    return refused(response) && env.writes().length === 0;
-  });
-}
-for (const folderId of ["f-inbox", "f-arch", "f-proj"]) {
-  await scenario(`J-3 allows ${folderId}`, async () => {
-    const env = makeEnv();
-    const response = await env.request("messages.move", { message_ids: ["1", "2"], destination_folder_id: folderId });
-    const moves = env.calls.filter((c) => c[0] === "messages.move");
-    return response.ok === true && moves.length === 1 && moves[0][2] === folderId;
-  });
-}
-await scenario("J-3 unknown folder is not found and nothing moves", async () => {
-  const env = makeEnv();
-  const response = await env.request("messages.move", { message_ids: ["1"], destination_folder_id: "nope" });
-  return response.ok === false && response.code === "not_found" && env.writes().length === 0;
-});
-
 // --- J-4: tag keys ----------------------------------------------------------------------------
 const NEL_KEY = "c1" + String.fromCharCode(0x85) + "ctl";
 const badTagKeys = ["has space", "tab\tkey", "paren(", 'quote"', "brace{", "percent%", "star*", "", "x".repeat(65), "\\Seen", "a]b", "$other", NEL_KEY];
@@ -227,7 +194,6 @@ const writeOps = [
   ["messages.mark", (list) => ({ message_ids: list, read: true })],
   ["messages.flag", (list) => ({ message_ids: list, flagged: true })],
   ["tags.update", (list) => ({ message_ids: list, add: ["$label1"], remove: [] })],
-  ["messages.move", (list) => ({ message_ids: list, destination_folder_id: "f-proj" })],
 ];
 for (const [op, build] of writeOps) {
   await scenario(`J-5 ${op}: 51 ids are refused`, async () => {

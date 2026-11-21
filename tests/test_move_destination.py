@@ -38,3 +38,44 @@ def test_server_does_not_read_the_move_environment_variable():
     from thunderbird_mcp import server
 
     assert "MOVE_ALLOWLIST" not in inspect.getsource(server)
+
+
+def test_safety_has_no_denied_special_uses_table():
+    assert not hasattr(safety, "DENIED_SPECIAL_USES")
+
+
+def test_backends_have_no_move_method():
+    from thunderbird_mcp.backend import MailBackend
+    from thunderbird_mcp.backends.bridge import BridgeBackend
+    from thunderbird_mcp.backends.fake import FakeBackend
+
+    for cls in (MailBackend, FakeBackend, BridgeBackend):
+        assert not hasattr(cls, "move_messages"), cls.__name__
+
+
+def test_op_table_has_no_move_op():
+    from thunderbird_mcp import ipc
+
+    assert "messages.move" not in ipc.ALLOWED_OPS
+
+
+def test_extension_source_has_no_move_path():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "extension" / "background.js").read_text(encoding="utf-8")
+    assert 'defineOp("messages.move"' not in source
+    assert "messages.move(" not in source
+    assert "ALLOWED_MOVE_SPECIAL_USES" not in source
+
+
+def test_probe_has_no_move_command():
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "bridge_probe.py"
+    spec = importlib.util.spec_from_file_location("bridge_probe_no_move", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert not hasattr(module, "SPECIAL_USE_CHOICES")
+    with pytest.raises(SystemExit):
+        module.main(["move", "--message-id", "1", "--folder-id", "f1", "--yes"])

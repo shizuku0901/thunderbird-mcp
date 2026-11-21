@@ -1,4 +1,4 @@
-"""メールバックエンドの抽象（SPEC §5）。公開メソッドは、この 15 個に固定する。"""
+"""メールバックエンドの抽象（SPEC §5）。公開メソッドは、この 14 個に固定する。"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -54,9 +54,6 @@ class MailBackend(ABC):
 
     @abstractmethod
     def update_tags(self, message_ids: list[str], add: list[str], remove: list[str]) -> None: ...
-
-    @abstractmethod
-    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> None: ...
 
     @abstractmethod
     def save_draft(self, draft: DraftRequest) -> DraftResult: ...

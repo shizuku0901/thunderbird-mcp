@@ -26,9 +26,6 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_BODY_CHARS = 2000000;
 const MAX_LIST_LIMIT = 50;
 
-// J-3: allowlist. A folder with no special use, or only these, may receive messages.
-const ALLOWED_MOVE_SPECIAL_USES = ["inbox", "archives"];
-
 // J-2: the only keys ever passed to messages.update().
 // (read, flagged and tags are each set through their own op below.)
 
@@ -398,18 +395,6 @@ defineOp("tags.list", async () => {
     name: String(tag.tag === undefined ? tag.key : tag.tag),
     color: tag.color == null ? "" : String(tag.color),
   }));
-});
-
-defineOp("messages.move", async (args) => {
-  const ids = parseMessageIds(args.message_ids);
-  const destination = await getFolder(args.destination_folder_id);
-  const specialUse = Array.isArray(destination.specialUse) ? destination.specialUse : [];
-  // J-3: allowlist on the special use of the destination.
-  if (!specialUse.every((use) => ALLOWED_MOVE_SPECIAL_USES.includes(use))) {
-    throw new Refusal("destination folder is not allowed");
-  }
-  await messenger.messages.move(ids, destination.id);
-  return null;
 });
 
 // J-6: the compose window must be closed after saving; if it cannot be, report an error.

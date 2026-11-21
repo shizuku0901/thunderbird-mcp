@@ -91,15 +91,6 @@ SU_BIN = "trash"  # ごみ箱
 SU_UNWANTED = "junk"  # 迷惑メール
 SU_PENDING_OUT = "outbox"  # 送信トレイ
 
-DENIED_SPECIAL_USES = frozenset({
-    SU_BIN,
-    SU_UNWANTED,
-    SU_PENDING_OUT,
-    SU_DRAFTS,
-    SU_TEMPLATES,
-    SU_SENT,
-})
-
 # タグとして付けてはならない IMAP キーワード（小文字で比べる）
 DANGEROUS_TAG_KEYS = frozenset({
     "$junk",

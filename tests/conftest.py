@@ -50,9 +50,6 @@ def fake(sample):
     folder("f-drafts", "Drafts", "/Drafts", (safety.SU_DRAFTS,))
     folder("f-archives", "Archives", "/Archives", (safety.SU_ARCHIVES,))
     folder("f-projects", "Projects", "/Projects")
-    folder("f-custom-su", "Custom", "/Custom", ("x-custom-special",))
-    for i, special_use in enumerate(sorted(safety.DENIED_SPECIAL_USES)):
-        folder(f"f-su-{i}", f"Special{i}", f"/Special{i}", (special_use,))
 
     fb.seed_tag(Tag(key="$label1", name="Important", color="#FF0000"))
     fb.seed_tag(Tag(key="$label2", name="Work", color="#FF9900"))

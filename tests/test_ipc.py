@@ -297,5 +297,6 @@ def test_pipe_name_is_per_user_and_sanitized():
 
 
 def test_op_table_matches_spec():
-    assert len(ipc.ALLOWED_OPS) == len(set(ipc.ALLOWED_OPS)) == 14
-    assert {"messages.move", "drafts.create", "health"} <= set(ipc.ALLOWED_OPS)
+    assert len(ipc.ALLOWED_OPS) == len(set(ipc.ALLOWED_OPS)) == 13
+    assert {"drafts.create", "health"} <= set(ipc.ALLOWED_OPS)
+    assert "messages.move" not in ipc.ALLOWED_OPS

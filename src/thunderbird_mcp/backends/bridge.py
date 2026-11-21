@@ -1,6 +1,6 @@
 """BridgeBackend: 名前付きパイプ経由で、Thunderbird の拡張（native_host を通して）に要求する。
 
-MailBackend の 15 メソッドを、ipc.ALLOWED_OPS の op に対応させるだけで、判断はしない。
+MailBackend の 14 メソッドを、ipc.ALLOWED_OPS の op に対応させるだけで、判断はしない。
 1 回の呼び出しごとに接続し、認証してから 1 つの要求を出す。
 拡張からのエラー文は、メール由来の文字列を含みうるので、そのまま上へ渡さない。
 """
@@ -232,12 +232,6 @@ class BridgeBackend(MailBackend):
 
     def update_tags(self, message_ids: list[str], add: list[str], remove: list[str]) -> None:
         self._call("tags.update", {"message_ids": list(message_ids), "add": list(add), "remove": list(remove)})
-
-    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> None:
-        self._call(
-            "messages.move",
-            {"message_ids": list(message_ids), "destination_folder_id": destination_folder_id},
-        )
 
     def save_draft(self, draft: DraftRequest) -> DraftResult:
         args = {
