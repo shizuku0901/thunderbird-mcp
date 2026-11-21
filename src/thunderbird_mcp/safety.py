@@ -5,6 +5,9 @@
 """
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 # --- 禁止語（hooks が ast で読むので、小文字のリテラルのタプルにする） ---------------
 FORBIDDEN_TERMS = (
     "delete",
@@ -154,3 +157,59 @@ UNTRUSTED_END = "<<<UNTRUSTED_EMAIL_CONTENT_END>>>"
 
 class SafetyError(ValueError):
     """安全検査に違反した。メール由来の文字列を、メッセージに含めない。"""
+
+
+# --- 添付ファイルの保存先 ------------------------------------------------------------
+_PATH_SEPARATORS = re.compile(r"[\\/]")
+_FILENAME_BAD_CHARS = frozenset('<>"|?*:')
+_RESERVED_DEVICE_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(10)}
+    | {f"lpt{i}" for i in range(10)}
+)
+
+
+def _has_control_char(text: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in text)
+
+
+def _check_filename(name: str) -> None:
+    if name in ("", ".", ".."):
+        raise SafetyError("invalid attachment filename")
+    if len(name) > MAX_FILENAME_LEN:
+        raise SafetyError("attachment filename is too long")
+    if _has_control_char(name) or any(ch in _FILENAME_BAD_CHARS for ch in name):
+        raise SafetyError("attachment filename has forbidden characters")
+    if name.endswith((".", " ")):
+        raise SafetyError("attachment filename ends with a dot or space")
+    stem = name.split(".", 1)[0].rstrip(" ").casefold()
+    if stem in _RESERVED_DEVICE_NAMES:
+        raise SafetyError("attachment filename is a reserved device name")
+
+
+def safe_attachment_path(root: Path | str, filename: str) -> Path:
+    """`root` の直下だけを指す、保存用のパスを返す。root がなければ作る。
+
+    パスの区切り（スラッシュとバックスラッシュ）より前は捨て、最後の部分だけを使う。
+    既存のファイルは上書きしない（` (n)` を付ける）。
+    """
+    if not isinstance(filename, str):
+        raise SafetyError("attachment filename must be a string")
+    name = _PATH_SEPARATORS.split(filename)[-1]
+    _check_filename(name)
+
+    base = Path(root)
+    base.mkdir(parents=True, exist_ok=True)
+    resolved_root = base.resolve()
+
+    candidate = resolved_root / name
+    suffix = Path(name).suffix
+    stem = name[: len(name) - len(suffix)] if suffix else name
+    counter = 1
+    while candidate.exists():
+        counter += 1
+        candidate = resolved_root / f"{stem} ({counter}){suffix}"
+
+    if candidate.parent != resolved_root:
+        raise SafetyError("attachment path escapes the save directory")
+    return candidate
