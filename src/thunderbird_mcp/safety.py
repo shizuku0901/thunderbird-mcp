@@ -335,3 +335,57 @@ def wrap_untrusted(text: object, max_chars: int = DEFAULT_MAX_BODY_CHARS) -> dic
         "content": f"{UNTRUSTED_BEGIN}\n{body}\n{UNTRUSTED_END}",
         "truncated": truncated,
     }
+
+
+# --- 下書きの検査 --------------------------------------------------------------------
+# 素のアドレスだけを許す（`Name <addr>` や `,` 区切りは不可）。fullmatch で使い、末尾の改行も通さない。
+_ADDRESS_RE = re.compile(
+    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}"
+    r"@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+"
+)
+
+
+def _has_header_unsafe_char(text: str) -> bool:
+    return any(
+        unicodedata.category(ch) == "Cc" or ch in _LINE_BREAKS or ch in _BIDI_CONTROLS
+        for ch in text
+    )
+
+
+def _check_addresses(addresses: object, label: str) -> list[str]:
+    if isinstance(addresses, (str, bytes)) or not isinstance(addresses, (list, tuple)):
+        raise SafetyError(f"{label} must be a list of addresses")
+    for address in addresses:
+        if (
+            not isinstance(address, str)
+            or len(address) > 254
+            or _ADDRESS_RE.fullmatch(address) is None
+        ):
+            raise SafetyError(f"invalid address in {label}")
+    return list(addresses)
+
+
+def check_draft(req: Any) -> None:
+    """下書きの要求を検査する。違反があれば SafetyError を投げる。
+
+    件名とアドレスに制御文字（CR、LF を含む）があれば拒否する。to は 1 件以上、
+    宛先は to・cc・bcc の合計で 20 件まで。
+    """
+    to = _check_addresses(req.to, "to")
+    cc = _check_addresses(req.cc, "cc")
+    bcc = _check_addresses(req.bcc, "bcc")
+    if not to:
+        raise SafetyError("at least one recipient is required")
+    if len(to) + len(cc) + len(bcc) > MAX_RECIPIENTS:
+        raise SafetyError(f"too many recipients (max {MAX_RECIPIENTS})")
+    if not isinstance(req.subject, str) or _has_header_unsafe_char(req.subject):
+        raise SafetyError("invalid subject")
+    if not isinstance(req.body, str) or "\x00" in req.body:
+        raise SafetyError("invalid body")
+    identity_id = req.identity_id
+    if identity_id is not None and (
+        not isinstance(identity_id, str) or not identity_id or _has_header_unsafe_char(identity_id)
+    ):
+        raise SafetyError("invalid identity id")
