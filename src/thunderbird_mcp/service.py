@@ -87,7 +87,7 @@ class MailService:
                 "account_id": f.account_id,
                 "name": _clean(f.name),
                 "path": _clean(f.path),
-                "special_use": list(f.special_use),
+                "special_use": [_clean(use) for use in f.special_use],
             }
             for f in self._backend.list_folders(account_id)
         ]
@@ -152,7 +152,7 @@ class MailService:
 
     def list_tags(self) -> dict[str, Any]:
         tags = [
-            {"key": t.key, "name": _clean(t.name), "color": _clean(t.color)}
+            {"key": _clean(t.key), "name": _clean(t.name), "color": _clean(t.color)}
             for t in self._backend.list_tags()
         ]
         return {"tags": tags}
