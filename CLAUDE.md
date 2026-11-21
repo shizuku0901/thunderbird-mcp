@@ -24,7 +24,7 @@ Claude が Thunderbird のメールを操作する MCP サーバー（Python 3.1
 - 機能を1つ追加するたびに、そのテストと禁止語スキャンが Green になったら commit する。複数の機能を1つの commit にまとめない。
 - メッセージは Conventional Commits 1.0.0 に従う: `<type>(<scope>): <description>`（英語の命令形・小文字で始め、72 文字以内）。
 - `git add` では、変更したファイルを名前で指定する。`.`、`-A`、`--all` は使わない。`.env`、`ipc.key`、`settings.local.json` は add しない。
-- 機能が完成したら、そのブランチだけを `git push -u origin <ブランチ名>` で push し、`gh pr create --base main` で PR を作る。PR の URL を報告して、そこで止まる。
+- 機能が完成したら、そのブランチだけを `git push -u origin <ブランチ名>` で push し、`gh pr create --base main` で PR を作る。作業ブランチから `git switch main` で main に戻し（`git pull` はしない）、PR の URL を報告して、そこで止まる。
 - PR のタイトルは Conventional Commits 形式。本文には、目的、変更点、対応する SPEC の節、テスト結果の要約、未検証項目を書く。実メールの内容、アカウント名、個人情報は入れない。
 - main への push、force push、マージ、PR のクローズ、ブランチの削除は、しない。マージは人間が GitHub 上で行う。
 - 次の機能に進むときは、人間のマージを待ってから `git switch main` → `git pull --ff-only` → 新しいブランチを切る。
