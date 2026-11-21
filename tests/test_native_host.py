@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from thunderbird_mcp import ipc
+from thunderbird_mcp import ipc, safety
 from thunderbird_mcp.ipc import IpcError, Reassembler, client_handshake, read_message, write_message
 from thunderbird_mcp.native_host import RelayHost, read_nm_message, write_nm_message
 
@@ -147,7 +147,10 @@ def test_request_is_relayed_and_the_client_id_is_restored(harness):
     assert isinstance(h.seen[0]["id"], int)
 
 
-@pytest.mark.parametrize("op", ["messages.delete", "compose.send", "", None, 5, "health "])
+FORBIDDEN_OPS = [f"{area}.{term}" for area in ("messages", "compose") for term in safety.FORBIDDEN_TERMS]
+
+
+@pytest.mark.parametrize("op", [*FORBIDDEN_OPS, "", None, 5, "health "])
 def test_unknown_ops_are_refused_without_reaching_the_extension(harness, op):
     h = harness()
     client = h.connect()
