@@ -77,7 +77,6 @@ ALLOWED_TOOLS = (
     "list_tags",
     "add_tags",
     "remove_tags",
-    "move_messages",
     "create_draft",
     "health_check",
 )
@@ -92,7 +91,6 @@ SU_BIN = "trash"  # ごみ箱
 SU_UNWANTED = "junk"  # 迷惑メール
 SU_PENDING_OUT = "outbox"  # 送信トレイ
 
-ALLOWED_MOVE_SPECIAL_USES = frozenset({SU_INBOX, SU_ARCHIVES})
 DENIED_SPECIAL_USES = frozenset({
     SU_BIN,
     SU_UNWANTED,
@@ -100,35 +98,6 @@ DENIED_SPECIAL_USES = frozenset({
     SU_DRAFTS,
     SU_TEMPLATES,
     SU_SENT,
-})
-
-# 名前またはパスの区切りごとに、小文字で比べる（多言語）
-DENIED_FOLDER_NAMES = frozenset({
-    "trash",
-    "deleted items",
-    "deleted messages",
-    "deleted",
-    "recycle bin",
-    "bin",
-    "junk",
-    "junk e-mail",
-    "junk email",
-    "spam",
-    "bulk mail",
-    "outbox",
-    "ごみ箱",
-    "ゴミ箱",
-    "削除済みアイテム",
-    "削除済み",
-    "迷惑メール",
-    "迷惑",
-    "送信トレイ",
-    "papierkorb",
-    "corbeille",
-    "papelera",
-    "cestino",
-    "lixeira",
-    "postausgang",
 })
 
 # タグとして付けてはならない IMAP キーワード（小文字で比べる）
@@ -218,7 +187,7 @@ def safe_attachment_path(root: Path | str, filename: str) -> Path:
     return candidate
 
 
-# --- 書き込みの検査（一括数・移動先・タグ） --------------------------------------------
+# --- 書き込みの検査（一括数・タグ） --------------------------------------------
 def check_batch(ids: object) -> list[str]:
     """メッセージ ID の一覧を検査し、重複を順序を保って除いた一覧を返す（1〜50 件）。"""
     if isinstance(ids, (str, bytes)) or not isinstance(ids, (list, tuple)):
@@ -236,29 +205,6 @@ def check_batch(ids: object) -> list[str]:
     if len(unique) > MAX_MESSAGES_PER_WRITE:
         raise SafetyError(f"too many messages in one write (max {MAX_MESSAGES_PER_WRITE})")
     return unique
-
-
-def _normalize_name(text: str) -> str:
-    return unicodedata.normalize("NFKC", text).casefold().strip()
-
-
-def check_move_destination(folder: Any, allowlist: Iterable[str] | None = None) -> None:
-    """移動先を検査する。許可リスト方式（特殊フォルダは inbox と archives だけ）。
-
-    名前、またはパスのどれかの区切りが `DENIED_FOLDER_NAMES` に当たれば拒否する
-    （拒否対象のフォルダの子への移動も防ぐため、末尾だけでなく全区切りを見る）。
-    """
-    if folder is None:
-        raise SafetyError("destination folder not found")
-    for special_use in folder.special_use:
-        if special_use not in ALLOWED_MOVE_SPECIAL_USES:
-            raise SafetyError("destination folder is not allowed")
-    names = {_normalize_name(folder.name)}
-    names.update(_normalize_name(part) for part in _PATH_SEPARATORS.split(folder.path))
-    if names & DENIED_FOLDER_NAMES:
-        raise SafetyError("destination folder is not allowed")
-    if allowlist is not None and folder.path not in set(allowlist):
-        raise SafetyError("destination folder is not in the allowlist")
 
 
 def _check_tag_format(key: object) -> str:

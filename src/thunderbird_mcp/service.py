@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,13 +38,11 @@ class MailService:
         attachment_root: Path | str,
         *,
         max_body_chars: int = safety.DEFAULT_MAX_BODY_CHARS,
-        move_allowlist: Iterable[str] | None = None,
         journal_path: Path | str | None = None,
     ) -> None:
         self._backend = backend
         self._attachment_root = Path(attachment_root)
         self._max_body_chars = max_body_chars
-        self._move_allowlist = None if move_allowlist is None else list(move_allowlist)
         self._journal_path = None if journal_path is None else Path(journal_path)
 
     # --- 整形（メール由来の文字列は sanitize する） -------------------------------------
@@ -238,25 +235,6 @@ class MailService:
         self._journal("remove_tags", message_ids=ids, tags=checked)
         return {"updated": ids, "tags": checked}
 
-    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> dict[str, Any]:
-        ids = safety.check_batch(message_ids)
-        if not isinstance(destination_folder_id, str):
-            raise safety.SafetyError("destination folder id must be a string")
-        try:
-            destination = self._backend.get_folder(destination_folder_id)
-        except KeyError:
-            raise safety.SafetyError("destination folder not found") from None
-        safety.check_move_destination(destination, self._move_allowlist)
-        sources = self._source_folders(ids)
-        self._backend.move_messages(ids, destination_folder_id)
-        self._journal(
-            "move_messages",
-            message_ids=ids,
-            source_folder_ids=sources,
-            destination_folder_id=destination_folder_id,
-        )
-        return {"moved": ids, "destination_folder_id": destination_folder_id}
-
     def create_draft(
         self,
         to: list[str],
@@ -287,15 +265,3 @@ class MailService:
         )
         self._journal("create_draft", message_id=result.message_id, folder_id=result.folder_id)
         return {"status": "saved_as_draft", "message_id": result.message_id, "folder_id": result.folder_id}
-
-    def _source_folders(self, ids: list[str]) -> list[str | None]:
-        """ジャーナル用に、移動元のフォルダ ID を調べる（ジャーナルが無効なら調べない）。"""
-        if self._journal_path is None:
-            return []
-        sources: list[str | None] = []
-        for message_id in ids:
-            try:
-                sources.append(self._backend.get_message(message_id).summary.folder_id)
-            except KeyError:
-                sources.append(None)
-        return sources

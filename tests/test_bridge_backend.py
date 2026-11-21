@@ -272,13 +272,14 @@ def test_unanswered_call_times_out_instead_of_hanging(make):
 # --- MailService との組み合わせ -----------------------------------------------------------
 def test_service_checks_run_before_any_write_op_reaches_the_bridge(make, tmp_path):
     seen = []
-    bin_folder = {"id": "f-bin", "account_id": "acc1", "name": "Bin", "path": "/Bin", "special_use": [safety.SU_BIN]}
+    bad_key = sorted(safety.DANGEROUS_TAG_KEYS)[0]
+    tags = [{"key": bad_key, "name": bad_key, "color": ""}]
 
     def responder(request):
         seen.append(request["op"])
-        return {"id": request["id"], "ok": True, "result": [bin_folder] if request["op"] == "folders.list" else None}
+        return {"id": request["id"], "ok": True, "result": tags if request["op"] == "tags.list" else None}
 
     service = MailService(make(responder), tmp_path / "att")
     with pytest.raises(safety.SafetyError):
-        service.move_messages(["11"], "f-bin")
-    assert seen == ["folders.list"]
+        service.add_tags(["11"], [bad_key])
+    assert seen == ["tags.list"]

@@ -1,4 +1,4 @@
-"""MCP サーバー（FastMCP / stdio）。公開ツールは safety.ALLOWED_TOOLS の 15 個だけ。
+"""MCP サーバー（FastMCP / stdio）。公開ツールは safety.ALLOWED_TOOLS の 14 個だけ。
 
 書き込みは必ず MailService を通す。このモジュールは backend を直接呼ばない。
 プロトコルの出力先は標準出力だけなので、ログは stderr の logging に出す。
@@ -57,10 +57,6 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "list_tags": "List the tags known to Thunderbird.",
     "add_tags": "Add existing tags to up to 50 messages. Unknown or unsafe tag keys are refused.",
     "remove_tags": "Remove existing tags from up to 50 messages. Unknown or unsafe tag keys are refused.",
-    "move_messages": (
-        "Move up to 50 messages to a user folder or Archives. "
-        "Special-purpose folders other than Inbox and Archives are refused."
-    ),
     "create_draft": (
         "Save a new draft in the Drafts folder for the user to review in Thunderbird. "
         "The draft is never transmitted by this server."
@@ -131,12 +127,9 @@ def _build_backend() -> Any:
 def build_service_from_env() -> MailService:
     home = Path.home()
     local_app_data = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
-    allowlist_raw = os.environ.get("THUNDERBIRD_MCP_MOVE_ALLOWLIST", "")
-    allowlist = [p.strip() for p in allowlist_raw.split(";") if p.strip()] or None
     return MailService(
         _build_backend(),
         _env_path("THUNDERBIRD_MCP_ATTACHMENT_DIR", home / "Downloads" / "thunderbird-mcp"),
-        move_allowlist=allowlist,
         journal_path=_env_path("THUNDERBIRD_MCP_JOURNAL", local_app_data / "thunderbird-mcp" / "journal.jsonl"),
     )
 

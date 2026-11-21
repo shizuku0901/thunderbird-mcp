@@ -21,7 +21,6 @@ EXPECTED_TOOLS = (
     "list_tags",
     "add_tags",
     "remove_tags",
-    "move_messages",
     "create_draft",
     "health_check",
 )
