@@ -1,14 +1,14 @@
 # SPEC: thunderbird-mcp（最小スタート構成）
 
-- 版: 0.1.0
+- 版: 0.2.0
 - 作成日: 2026-11-21
-- 状態: 承認済み（JS ブリッジの採用は 2026-11-21 にユーザーが承認）
+- 状態: 承認済み（JS ブリッジの採用は 2026-11-21 にユーザーが承認。`move_messages` を外す変更も 2026-11-21 に承認。§13 を参照）
 
 ## 1. 目的と範囲
 
 **目的:** Windows で起動中の Thunderbird のメールを、Claude（MCP クライアント）が検索・閲覧・整理し、下書きを作れるようにする。
 
-**持たせる機能:** 検索、一覧、本文の取得、添付の一覧と保存、既読/未読、フラグ、タグ、下書きの作成、フォルダ間の移動。
+**持たせる機能:** 検索、一覧、本文の取得、添付の一覧と保存、既読/未読、フラグ、タグ、下書きの作成。
 
 **持たせない機能（構造的に不可能にする）:**
 - 削除系: ごみ箱・迷惑メール・送信トレイへの移動、削除フラグの付与、完全消去を含む。
@@ -70,12 +70,11 @@ class MailBackend(ABC):
     def set_flagged(self, message_ids: list[str], flagged: bool) -> None: ...
     def list_tags(self) -> list[Tag]: ...
     def update_tags(self, message_ids: list[str], add: list[str], remove: list[str]) -> None: ...
-    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> None: ...
     def save_draft(self, draft: DraftRequest) -> DraftResult: ...
     def health(self) -> dict: ...
 ```
 
-- 公開メソッドはこの 15 個に固定する（`tests/test_tool_allowlist.py` で検証）。
+- 公開メソッドはこの 14 個に固定する（`tests/test_tool_allowlist.py` で検証）。
 - `models.py` に置く dataclass: `Account(id, name, type)`、`Folder(id, account_id, name, path, special_use: tuple[str, ...] = ())`、`Tag(key, name, color="")`、`AttachmentInfo(part_name, filename, content_type, size)`、`MessageSummary(id, folder_id, subject, author, date, read=False, flagged=False, tags=(), has_attachments=False)`、`MessageDetail(summary, body_text, attachments)`、`SearchQuery(text="", folder_id=None, unread_only=False, flagged_only=False, tag=None, limit=20)`、`DraftRequest(to, subject, body, cc=(), bcc=(), identity_id=None)`、`DraftResult(message_id, folder_id)`。
 - `FakeBackend`（`backends/fake.py`）について:
   - 呼ばれたメソッド名を `calls: list[str]` に記録する。
@@ -83,7 +82,7 @@ class MailBackend(ABC):
   - テストの準備用に `seed_account`、`seed_folder`、`seed_tag`、`seed_message(summary, body_text="", attachments=())` を持つ。`attachments` は `(AttachmentInfo, bytes)` の並びで、これらの呼び出しは `calls` に記録しない。
   - `search_messages` は件名の部分一致（大文字小文字を区別しない）で探す。
   - `with_sample_data()` は合成データを入れたインスタンスを返す。禁止語は safety の定数から組み立てる。
-- `MailService(backend, attachment_root, *, max_body_chars=20_000, move_allowlist=None, journal_path=None)` が、公開ツールと同名のメソッドを持つ。
+- `MailService(backend, attachment_root, *, max_body_chars=20_000, journal_path=None)` が、公開ツールと同名のメソッドを持つ。
 
 ## 6. 公開ツール許可リスト（完全一致）
 
@@ -101,9 +100,8 @@ class MailBackend(ABC):
 | 10 | `list_tags` | なし | `{"tags": [{key, name, color}]}` | 読み取り |
 | 11 | `add_tags` | `message_ids`, `tags` | `{"updated", "tags"}` | 書き込み |
 | 12 | `remove_tags` | `message_ids`, `tags` | `{"updated", "tags"}` | 書き込み |
-| 13 | `move_messages` | `message_ids`, `destination_folder_id` | `{"moved", "destination_folder_id"}` | 書き込み |
-| 14 | `create_draft` | `to`, `subject`, `body`, `cc?`, `bcc?`, `identity_id?` | `{"status": "saved_as_draft", "message_id", "folder_id"}` | 書き込み |
-| 15 | `health_check` | なし | `{"backend", "ok", "thunderbird_version?", "draft_mode?"}` | 読み取り |
+| 13 | `create_draft` | `to`, `subject`, `body`, `cc?`, `bcc?`, `identity_id?` | `{"status": "saved_as_draft", "message_id", "folder_id"}` | 書き込み |
+| 14 | `health_check` | なし | `{"backend", "ok", "thunderbird_version?", "draft_mode?"}` | 読み取り |
 
 - summary の項目: `id`, `folder_id`, `subject`, `author`, `date`, `read`, `flagged`, `tags`, `has_attachments`。
 - `create_draft` の引数は上の 6 個に固定する。「すぐ出す」のようなフラグは持たない。
@@ -121,14 +119,13 @@ class MailBackend(ABC):
 | `attachments.read` | `messages.getAttachmentFile()` | messagesRead |
 | `messages.mark` / `messages.flag` / `tags.update` | `messages.update()` | messagesRead / messagesUpdate |
 | `tags.list` | `messages.tags.list()`（古い版は `messages.listTags()`） | messagesTags 系 |
-| `messages.move` | `messages.move()` | messagesMove |
 | `drafts.create` | `messages.saveMessage()` があればそれを使う。なければ `compose.beginNew()` → `compose.saveMessage(tabId, {mode: "draft"})` → `tabs.remove(tabId)` | compose, compose.save |
 | `health` | `runtime.getBrowserInfo()` | なし |
 
 **JS 側で守ること（Python 側と二重に検査する）:**
 - J-1: op は固定表だけを受け付け、知らない op は拒否する。
 - J-2: `messages.update` に渡すキーは `read`、`flagged`、`tags` の3つだけ。
-- J-3: 移動先は `specialUse` が空か、`inbox` / `archives` だけを許す（許可リスト方式）。
+- J-3: 欠番（2026-11-21 に移動を外した。§13 を参照）。
 - J-4: タグのキーは、タグ一覧に存在するものだけを受け付ける。
 - J-5: 1回の書き込みは 50 件まで。
 - J-6: 作成ウィンドウは保存後に閉じる。閉じられなければエラーを返す。
@@ -143,25 +140,25 @@ class MailBackend(ABC):
 |---|---|
 | S-1 | 拡張は `safety.FORBIDDEN_PERMISSIONS` の権限も `safety.FORBIDDEN_MANIFEST_KEYS` のキー（Experiment API）も宣言しない。`host_permissions` も持たない |
 | S-2 | 公開ツールは §6 と完全一致させる |
-| S-3 | `MailBackend` の公開メソッドは §5 の 15 個に固定する |
+| S-3 | `MailBackend` の公開メソッドは §5 の 14 個に固定する |
 | S-4 | `src/` は `safety.FORBIDDEN_IMPORTS`（メール送出・IMAP・POP のライブラリ）を import しない。`__import__(` と `import_module(` も使わない |
-| S-5 | 移動先の検査: `special_use` が `ALLOWED_MOVE_SPECIAL_USES`（inbox、archives）以外なら拒否する。名前またはパスの末尾が `DENIED_FOLDER_NAMES`（多言語、大文字小文字を区別しない）に当たれば拒否する。存在しないフォルダも拒否する。`move_allowlist` が設定されていれば、その `path` に含まれるものだけを許す |
+| S-5 | 欠番（2026-11-21 に移動を外した。§13 を参照） |
 | S-6 | タグの検査: `DANGEROUS_TAG_KEYS` に当たるもの、`\` で始まるもの、空白・制御文字・`(){%*"]\` を含むもの、64 文字を超えるもの、一覧にないものは拒否する。外す場合も同じ検査をする |
 | S-7 | 1回の書き込みは 1〜50 件（`MAX_MESSAGES_PER_WRITE`）。重複は順序を保って除く |
 | S-8 | 下書き: 件名とアドレスに CR、LF、制御文字があれば拒否する。アドレスは素のアドレスだけ（`Name <addr>` や `,` での区切りは不可）。宛先は合計 20 件まで。`to` は 1 件以上 |
 | S-9 | 添付の保存: パスの最後の部分だけを使う。空、`.`、`..`、`:`、制御文字、`<>"\|?*`、末尾の `.` や空白、予約デバイス名（拡張子付きを含む）、200 文字超は拒否する。保存先は `attachment_root` の直下に限り、既存のファイルは上書きしない（`open(..., "xb")` と ` (n)` の付与）。上限は 25 MiB |
 | S-10 | stdout: `native_host.py` 以外は stdout に書かない。ログは stderr に出す |
 | S-11 | 安全検査に違反したら `SafetyError` を投げ、backend は呼ばない。ツールのエラー文は `refused: <理由>` とし、メール由来の文字列を含めない |
-| S-12 | 書き込みは JSONL の操作ジャーナルに残す（時刻、ツール、ID、移動元と移動先またはタグ）。本文と件名は書かない |
+| S-12 | 書き込みは JSONL の操作ジャーナルに残す（時刻、ツール、ID、タグ）。本文と件名は書かない |
 | S-13 | 開発用の Claude Code では、実際の `mcp__thunderbird` ツールを deny にする |
 
 **`safety.py` が公開する名前:**
 - 定数: `FORBIDDEN_TERMS`（小文字のリテラルのタプル）、`FORBIDDEN_IMPORTS`、`FORBIDDEN_PERMISSIONS`、`FORBIDDEN_MANIFEST_KEYS`、`ALLOWED_EXTENSION_PERMISSIONS`、`ALLOWED_TOOLS`（§6 の順のタプル）
 - 特殊フォルダ: `SU_INBOX`、`SU_DRAFTS`、`SU_ARCHIVES`、`SU_SENT`、`SU_TEMPLATES` と、ごみ箱・迷惑メール・送信トレイに当たる3定数
-- 集合: `ALLOWED_MOVE_SPECIAL_USES`、`DENIED_SPECIAL_USES`（ごみ箱、迷惑メール、送信トレイ、下書き、テンプレート、送信済み）、`DENIED_FOLDER_NAMES`、`DANGEROUS_TAG_KEYS`
+- 集合: `DANGEROUS_TAG_KEYS`
 - 上限: `MAX_MESSAGES_PER_WRITE=50`、`MAX_RECIPIENTS=20`、`MAX_TAG_KEY_LEN=64`、`MAX_FILENAME_LEN=200`、`MAX_ATTACHMENT_BYTES=25*1024*1024`、`DEFAULT_MAX_BODY_CHARS=20000`、`MAX_SEARCH_LIMIT=50`
 - マーカー: `UNTRUSTED_BEGIN`、`UNTRUSTED_END`
-- 関数: `class SafetyError(ValueError)`、`check_batch(ids)`、`check_move_destination(folder, allowlist=None)`、`check_tags(tags, known_keys)`、`check_draft(req)`、`sanitize_header(text, max_len=500)`、`wrap_untrusted(text, max_chars)`、`safe_attachment_path(root, filename)`（root がなければ作る）
+- 関数: `class SafetyError(ValueError)`、`check_batch(ids)`、`check_tags(tags, known_keys)`、`check_draft(req)`、`sanitize_header(text, max_len=500)`、`wrap_untrusted(text, max_chars)`、`safe_attachment_path(root, filename)`（root がなければ作る）
 
 ## 9. 信頼できない入力（メール由来のデータ）
 
@@ -180,7 +177,6 @@ class MailBackend(ABC):
 |---|---|---|
 | `THUNDERBIRD_MCP_BACKEND` | `bridge` | `bridge` または `fake` |
 | `THUNDERBIRD_MCP_ATTACHMENT_DIR` | `%USERPROFILE%\Downloads\thunderbird-mcp` | 添付の保存先 |
-| `THUNDERBIRD_MCP_MOVE_ALLOWLIST` | 未設定 | 移動先として許すフォルダのパス（`;` 区切り） |
 | `THUNDERBIRD_MCP_JOURNAL` | `%LOCALAPPDATA%\thunderbird-mcp\journal.jsonl` | 操作ジャーナル |
 
 登録の例（ほかのプロジェクトで使う場合）:
@@ -194,7 +190,7 @@ claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird
 **自動（`uv run pytest -q` がすべて通ること）:**
 - AC-1: 禁止語スキャン
 - AC-2: 公開ツールの許可リストとの一致
-- AC-3: 危険な宛先への移動の拒否
+- AC-3: 移動の経路がないこと（ツール、backend、op、拡張の権限）
 - AC-4: 危険なタグの拒否
 - AC-5: 添付保存でのパストラバーサルの防止
 - AC-6: 下書きが下書きフォルダにだけ保存されること
@@ -205,10 +201,27 @@ claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird
 **手動（Windows の実機で、人間が行う）:**
 - AC-W1: `register_native_host.ps1` を実行し、Thunderbird を再起動する。`health_check` が `ok: true` を返し、`thunderbird_version` と `draft_mode` が出る。
 - AC-W2: `create_draft` の結果が下書きフォルダに現れる。送信トレイは空のまま。
-- AC-W3: `bridge_probe.py` で、Python の検査を迂回してごみ箱フォルダへの `messages.move` を直接投げると、JS が拒否する。
+- AC-W3: 欠番（2026-11-21 に移動を外した。§13 を参照）。
 - AC-W4: 拡張の権限ダイアログに、削除と送信に当たる権限が表示されない。
 - AC-W5: Thunderbird を終了した状態で、ツールが接続エラーを返し、ハングしない。
 
 ## 12. 未確認事項（実機で確認する）
 
 Windows の Thunderbird が読むレジストリキー、Native Messaging のメッセージの上限、`messages.saveMessage` の引数と必要な権限、`messagesUpdate` と `messagesTags` の権限名（ESR 140 と 153 以降）、`folders.query` と `tags.list` の有無、`.cmd` をホストとして起動できるか、asyncio の名前付きパイプ API、名前付きパイプの既定の ACL。
+
+## 13. 外した機能の記録
+
+### `move_messages`（フォルダ間の移動）
+
+- **日付:** 2026-11-21
+- **承認:** 人間が承認済み（同日）。
+- **理由:** 誤作動が心配なため。メール本文の指示に引きずられた誤操作で、メールが意図しないフォルダへ動く経路を、構造的に残さない。
+- **外した範囲:**
+  - 公開ツール `move_messages`（15 個から 14 個へ）
+  - `MailBackend.move_messages`（15 個から 14 個へ）
+  - ブリッジ op `messages.move`
+  - JS の規則 J-3、安全要件 S-5、手動の受け入れ AC-W3（番号は詰めず、欠番にした）
+  - 拡張の権限 `messagesMove`
+  - 環境変数 `THUNDERBIRD_MCP_MOVE_ALLOWLIST`、`MailService` の `move_allowlist`
+  - `bridge_probe.py` の `move`
+- **戻すとき:** 移動のコードが残っている最後の commit は `6776835`。再び足すには、先にこの SPEC を更新して人間の承認を取る（CLAUDE.md の決まり）。そのうえで、削除済みの J-3、S-5、AC-W3 の規則とテスト（`tests/test_move_destination.py`、`tests/extension_harness.mjs` の J-3）を、この commit を参考に復元する。
