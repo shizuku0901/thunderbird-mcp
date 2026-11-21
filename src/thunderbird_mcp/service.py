@@ -219,3 +219,21 @@ class MailService:
         self._backend.set_flagged(ids, flagged)
         self._journal("set_flagged", message_ids=ids, flagged=flagged)
         return {"updated": ids, "flagged": flagged}
+
+    def _checked_tags(self, message_ids: list[str], tags: list[str]) -> tuple[list[str], list[str]]:
+        """件数とタグを、backend を書き込む前にすべて検査する。1 つでも違反なら全体を拒否する。"""
+        ids = safety.check_batch(message_ids)
+        known = [t.key for t in self._backend.list_tags()]
+        return ids, safety.check_tags(tags, known)
+
+    def add_tags(self, message_ids: list[str], tags: list[str]) -> dict[str, Any]:
+        ids, checked = self._checked_tags(message_ids, tags)
+        self._backend.update_tags(ids, checked, [])
+        self._journal("add_tags", message_ids=ids, tags=checked)
+        return {"updated": ids, "tags": checked}
+
+    def remove_tags(self, message_ids: list[str], tags: list[str]) -> dict[str, Any]:
+        ids, checked = self._checked_tags(message_ids, tags)
+        self._backend.update_tags(ids, [], checked)
+        self._journal("remove_tags", message_ids=ids, tags=checked)
+        return {"updated": ids, "tags": checked}
