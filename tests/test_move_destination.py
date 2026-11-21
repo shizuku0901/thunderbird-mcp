@@ -79,3 +79,14 @@ def test_probe_has_no_move_command():
     assert not hasattr(module, "SPECIAL_USE_CHOICES")
     with pytest.raises(SystemExit):
         module.main(["move", "--message-id", "1", "--folder-id", "f1", "--yes"])
+
+
+def test_move_permission_is_gone():
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(
+        (Path(__file__).resolve().parents[1] / "extension" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert "messagesMove" not in manifest["permissions"]
+    assert "messagesMove" not in safety.ALLOWED_EXTENSION_PERMISSIONS

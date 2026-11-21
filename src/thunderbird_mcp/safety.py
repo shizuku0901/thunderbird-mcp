@@ -55,7 +55,6 @@ ALLOWED_EXTENSION_PERMISSIONS = frozenset({
     "accountsRead",
     "messagesRead",
     "messagesUpdate",
-    "messagesMove",
     "messagesTags",
     "messagesTagsList",
     "compose",

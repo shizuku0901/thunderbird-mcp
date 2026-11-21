@@ -33,6 +33,12 @@ def test_permissions_within_allowlist():
     assert not extra, f"許可リスト外の権限: {sorted(extra)}"
 
 
+def test_move_permission_is_not_declared_or_allowed():
+    # SPEC §13: 2026-11-21 に移動を外した。
+    assert "messagesMove" not in _permissions(_load(MANIFEST))
+    assert "messagesMove" not in safety.ALLOWED_EXTENSION_PERMISSIONS
+
+
 def test_no_forbidden_manifest_keys():
     assert not set(_load(MANIFEST)) & safety.FORBIDDEN_MANIFEST_KEYS
 

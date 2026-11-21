@@ -47,8 +47,8 @@ SPEC §11 の手動の受け入れ基準を、Windows の実機で行うため�
 ## AC-W4: 権限ダイアログに、削除と送出の権限が出ない
 
 1. 拡張を読み込むときの権限の表示、または「アドオンとテーマ」→ 拡張 →「権限」タブを見る。
-2. 期待する結果: メールを削除する権限、メールを送出する権限は表示されない。宣言している権限は次の 8 個だけ（`extension/manifest.json`）:
-   `accountsRead`、`messagesRead`、`messagesUpdate`、`messagesMove`、`messagesTagsList`、`compose`、`compose.save`、`nativeMessaging`
+2. 期待する結果: メールを削除する権限、メールを送出する権限は表示されない。宣言している権限は次の 7 個だけ（`extension/manifest.json`）:
+   `accountsRead`、`messagesRead`、`messagesUpdate`、`messagesTagsList`、`compose`、`compose.save`、`nativeMessaging`
 3. 注意（未確認）: `compose` の権限の説明文に、「作成して送出するときのメールを読み書きする」といった文言が含まれる可能性があります。これは `compose` の説明文で、送出専用の権限（`compose` 系の、送出を許す権限）は宣言していません。文言が出たら、**画面の文言をそのまま報告**してください。マニフェストに送出の権限がないことは、自動テスト（`tests/test_extension_manifest.py`）で確認済みです。
 
 ## AC-W5: Thunderbird を終了したとき、ハングしない
