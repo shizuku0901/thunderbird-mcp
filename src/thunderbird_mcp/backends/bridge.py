@@ -189,6 +189,8 @@ class BridgeBackend(MailBackend):
             "flagged_only": query.flagged_only,
             "tag": query.tag,
             "limit": query.limit,
+            "since": query.since,
+            "until": query.until,
         }
         return self._convert(lambda r: [self._summary(d) for d in r], self._call("messages.query", args))
 

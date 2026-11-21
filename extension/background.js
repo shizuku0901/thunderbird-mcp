@@ -102,6 +102,17 @@ function parseOptionalString(value, what) {
   return value;
 }
 
+// Date-times from Python are UTC ISO 8601 strings; a date alone or a missing offset is refused here too.
+const DATE_BOUND_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+
+function parseOptionalDate(value, what) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || !DATE_BOUND_RE.test(value)) throw new Refusal("invalid " + what);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Refusal("invalid " + what);
+  return date;
+}
+
 function clampInt(value, low, high, fallback) {
   if (value === null || value === undefined) return fallback;
   if (!Number.isInteger(value)) throw new Refusal("limit and offset must be integers");
@@ -335,6 +346,11 @@ defineOp("messages.query", async (args) => {
   if (args.flagged_only === true) query.flagged = true;
   const tag = parseOptionalString(args.tag, "tag");
   if (tag) query.tags = { tags: { [tag]: true }, mode: "all" };
+  const since = parseOptionalDate(args.since, "since");
+  const until = parseOptionalDate(args.until, "until");
+  if (since && until && since.getTime() > until.getTime()) throw new Refusal("since is later than until");
+  if (since) query.fromDate = since;
+  if (until) query.toDate = until;
   const messages = await collectMessages(await messenger.messages.query(query), limit, 0);
   return messages.map((header) => mapSummary(header, false));
 });

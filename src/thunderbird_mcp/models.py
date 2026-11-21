@@ -64,6 +64,8 @@ class SearchQuery:
     flagged_only: bool = False
     tag: str | None = None
     limit: int = 20
+    since: str | None = None  # UTC に直した ISO 8601。この日時以降（境界を含む）
+    until: str | None = None  # UTC に直した ISO 8601。この日時以前（境界を含む）
 
 
 @dataclass(frozen=True)

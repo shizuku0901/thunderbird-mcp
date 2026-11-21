@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -226,6 +227,39 @@ def check_tags(tags: object, known_keys: Iterable[str]) -> list[str]:
     if any(key not in known for key in checked):
         raise SafetyError("unknown tag key")
     return checked
+
+
+# --- 検索の日付範囲の検査 ------------------------------------------------------------
+# 時刻とタイムゾーン付きの ISO 8601 だけを許す。日付だけやタイムゾーンなしは曖昧なので拒否する。
+_DATE_BOUND_RE = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})"
+)
+
+
+def _check_date_bound(value: object, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or _DATE_BOUND_RE.fullmatch(value) is None:
+        raise SafetyError(f"{name} must be an ISO 8601 date-time with a time zone")
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (ValueError, OverflowError):
+        raise SafetyError(f"{name} is not a valid date-time") from None
+
+
+def check_date_range(since: object, until: object) -> tuple[str | None, str | None]:
+    """検索の日付範囲を検査し、UTC に直した ISO 8601 の `(since, until)` を返す。
+
+    `since` 以降、`until` 以前（どちらも境界を含む）。片方だけの指定もできる。
+    日付だけ、タイムゾーンなし、読めない値、文字列以外、`since` が `until` より後のものは拒否する。
+    エラー文に入力の文字列を含めない。
+    """
+    start = _check_date_bound(since, "since")
+    end = _check_date_bound(until, "until")
+    if start is not None and end is not None and datetime.fromisoformat(start) > datetime.fromisoformat(end):
+        raise SafetyError("since must not be later than until")
+    return start, end
 
 
 # --- メール由来の文字列の扱い --------------------------------------------------------

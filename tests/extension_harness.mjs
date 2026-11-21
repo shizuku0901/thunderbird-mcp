@@ -295,6 +295,42 @@ await scenario("reads return mapped data and never write", async () => {
     read.ok && read.result.data_b64 === "YWJj" && env.writes().length === 0
   );
 });
+// SPEC §6 / S-14: since and until become fromDate and toDate; anything else is refused.
+await scenario("messages.query passes since and until as fromDate and toDate", async () => {
+  const env = makeEnv();
+  const response = await env.request("messages.query", {
+    text: "", since: "2026-10-31T15:00:00+00:00", until: "2026-11-01T14:59:59+00:00", limit: 5,
+  }, 10);
+  const call = env.calls.find((c) => c[0] === "messages.query");
+  return (
+    response.ok && call[1].fromDate.toISOString() === "2026-10-31T15:00:00.000Z" &&
+    call[1].toDate.toISOString() === "2026-11-01T14:59:59.000Z"
+  );
+});
+await scenario("messages.query without dates adds no date filter", async () => {
+  const env = makeEnv();
+  const response = await env.request("messages.query", { text: "x", since: null, until: null, limit: 5 }, 11);
+  const call = env.calls.find((c) => c[0] === "messages.query");
+  return response.ok && !("fromDate" in call[1]) && !("toDate" in call[1]);
+});
+await scenario("messages.query refuses bad dates before calling messenger", async () => {
+  const bad = ["2026-11-01", "2026-11-01T00:00:00", "nonsense", "2026-13-01T00:00:00Z", 5, true, ["2026-11-01T00:00:00Z"]];
+  let id = 20;
+  for (const key of ["since", "until"]) {
+    for (const value of bad) {
+      const env = makeEnv();
+      const response = await env.request("messages.query", { text: "", [key]: value, limit: 5 }, id++);
+      if (!refused(response) || env.calls.some((c) => c[0] === "messages.query")) {
+        throw new Error(`not refused: ${key}=${String(value)}`);
+      }
+    }
+  }
+  const env = makeEnv();
+  const swapped = await env.request("messages.query", {
+    since: "2026-11-02T00:00:00Z", until: "2026-11-01T00:00:00Z",
+  }, id++);
+  return refused(swapped) && !env.calls.some((c) => c[0] === "messages.query");
+});
 // SPEC §6: messages.list returns newest first, and offset/limit apply after sorting.
 // The stub returns ids in ascending order, so id 60 is the newest only if the op sorts by date.
 await scenario("messages.list sorts newest first before offset and limit", async () => {
