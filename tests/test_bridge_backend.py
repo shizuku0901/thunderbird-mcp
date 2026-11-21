@@ -89,7 +89,20 @@ CALLS = [
     (
         "messages.query",
         lambda b: b.search_messages(SearchQuery(text="x", folder_id="f1", unread_only=True, tag="$label1", limit=5)),
-        {"text": "x", "folder_id": "f1", "unread_only": True, "flagged_only": False, "tag": "$label1", "limit": 5},
+        {
+            "text": "x", "folder_id": "f1", "unread_only": True, "flagged_only": False, "tag": "$label1",
+            "limit": 5, "since": None, "until": None,
+        },
+    ),
+    (
+        "messages.query",
+        lambda b: b.search_messages(
+            SearchQuery(since="2026-10-31T15:00:00+00:00", until="2026-11-01T14:59:59+00:00")
+        ),
+        {
+            "text": "", "folder_id": None, "unread_only": False, "flagged_only": False, "tag": None,
+            "limit": 20, "since": "2026-10-31T15:00:00+00:00", "until": "2026-11-01T14:59:59+00:00",
+        },
     ),
     ("messages.list", lambda b: b.list_messages("f1", 10, 20), {"folder_id": "f1", "limit": 10, "offset": 20}),
     ("messages.get", lambda b: b.get_message("11"), {"message_id": "11"}),

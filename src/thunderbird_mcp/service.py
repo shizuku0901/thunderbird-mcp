@@ -98,7 +98,10 @@ class MailService:
         flagged_only: bool = False,
         tag: str | None = None,
         limit: int = 20,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict[str, Any]:
+        start, end = safety.check_date_range(since, until)
         query = SearchQuery(
             text=text,
             folder_id=folder_id,
@@ -106,6 +109,8 @@ class MailService:
             flagged_only=bool(flagged_only),
             tag=tag,
             limit=_clamp_int(limit, 1, safety.MAX_SEARCH_LIMIT, "limit"),
+            since=start,
+            until=end,
         )
         found = self._backend.search_messages(query)[: query.limit]
         return {

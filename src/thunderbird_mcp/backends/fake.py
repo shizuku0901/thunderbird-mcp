@@ -27,13 +27,18 @@ from ..models import (
 _OLDEST = datetime.min.replace(tzinfo=timezone.utc)
 
 
-def _date_sort_key(summary: MessageSummary) -> datetime:
-    """ISO 8601 の date を比べられる値にする。空や読めない値は最も古い扱いにする。"""
+def _parse_date(summary: MessageSummary) -> datetime | None:
+    """ISO 8601 の date を比べられる値にする。空や読めない値は None。"""
     try:
         parsed = datetime.fromisoformat(summary.date)
     except ValueError:
-        return _OLDEST
+        return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _date_sort_key(summary: MessageSummary) -> datetime:
+    """並べ替え用。空や読めない値は最も古い扱いにする。"""
+    return _parse_date(summary) or _OLDEST
 
 
 class FakeBackend(MailBackend):
@@ -123,10 +128,16 @@ class FakeBackend(MailBackend):
     def search_messages(self, query: SearchQuery) -> list[MessageSummary]:
         self.calls.append("search_messages")
         needle = query.text.casefold()
+        since = datetime.fromisoformat(query.since) if query.since else None
+        until = datetime.fromisoformat(query.until) if query.until else None
         found: list[MessageSummary] = []
         for summary in self._messages.values():
             if needle and needle not in summary.subject.casefold():
                 continue
+            if since is not None or until is not None:
+                when = _parse_date(summary)
+                if when is None or (since is not None and when < since) or (until is not None and when > until):
+                    continue
             if query.folder_id is not None and summary.folder_id != query.folder_id:
                 continue
             if query.unread_only and summary.read:
