@@ -237,3 +237,34 @@ class MailService:
         self._backend.update_tags(ids, [], checked)
         self._journal("remove_tags", message_ids=ids, tags=checked)
         return {"updated": ids, "tags": checked}
+
+    def move_messages(self, message_ids: list[str], destination_folder_id: str) -> dict[str, Any]:
+        ids = safety.check_batch(message_ids)
+        if not isinstance(destination_folder_id, str):
+            raise safety.SafetyError("destination folder id must be a string")
+        try:
+            destination = self._backend.get_folder(destination_folder_id)
+        except KeyError:
+            raise safety.SafetyError("destination folder not found") from None
+        safety.check_move_destination(destination, self._move_allowlist)
+        sources = self._source_folders(ids)
+        self._backend.move_messages(ids, destination_folder_id)
+        self._journal(
+            "move_messages",
+            message_ids=ids,
+            source_folder_ids=sources,
+            destination_folder_id=destination_folder_id,
+        )
+        return {"moved": ids, "destination_folder_id": destination_folder_id}
+
+    def _source_folders(self, ids: list[str]) -> list[str | None]:
+        """ジャーナル用に、移動元のフォルダ ID を調べる（ジャーナルが無効なら調べない）。"""
+        if self._journal_path is None:
+            return []
+        sources: list[str | None] = []
+        for message_id in ids:
+            try:
+                sources.append(self._backend.get_message(message_id).summary.folder_id)
+            except KeyError:
+                sources.append(None)
+        return sources
