@@ -104,6 +104,7 @@ class MailBackend(ABC):
 | 14 | `health_check` | なし | `{"backend", "ok", "thunderbird_version?", "draft_mode?"}` | 読み取り |
 
 - summary の項目: `id`, `folder_id`, `subject`, `author`, `date`, `read`, `flagged`, `tags`, `has_attachments`。
+- `list_messages` は `date` の新しい順に並べ、同じ日時なら Thunderbird が返した順を保つ。そのうえで `offset` と `limit` を適用する。
 - `create_draft` の引数は上の 6 個に固定する。「すぐ出す」のようなフラグは持たない。
 
 ## 7. ブリッジ op 許可リスト（Python ↔ JS）

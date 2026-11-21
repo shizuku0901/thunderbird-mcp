@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 from .. import safety
 from ..backend import MailBackend
@@ -21,6 +22,18 @@ from ..models import (
     SearchQuery,
     Tag,
 )
+
+
+_OLDEST = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _date_sort_key(summary: MessageSummary) -> datetime:
+    """ISO 8601 の date を比べられる値にする。空や読めない値は最も古い扱いにする。"""
+    try:
+        parsed = datetime.fromisoformat(summary.date)
+    except ValueError:
+        return _OLDEST
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 class FakeBackend(MailBackend):
@@ -128,6 +141,8 @@ class FakeBackend(MailBackend):
     def list_messages(self, folder_id: str, limit: int, offset: int) -> list[MessageSummary]:
         self.calls.append("list_messages")
         in_folder = [m for m in self._messages.values() if m.folder_id == folder_id]
+        # SPEC §6: newest first; equal or missing dates keep their original order (stable sort).
+        in_folder.sort(key=_date_sort_key, reverse=True)
         start = max(0, offset)
         return in_folder[start : start + max(0, limit)]
 
