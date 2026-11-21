@@ -1,0 +1,7 @@
+{
+  "name": "thunderbird_mcp_host",
+  "description": "Thunderbird MCP native messaging host (relay between the MCP server and the extension)",
+  "path": "thunderbird_mcp_host.cmd",
+  "type": "stdio",
+  "allowed_extensions": ["thunderbird-mcp-bridge@local.invalid"]
+}
