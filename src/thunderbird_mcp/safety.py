@@ -6,7 +6,10 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 # --- 禁止語（hooks が ast で読むので、小文字のリテラルのタプルにする） ---------------
 FORBIDDEN_TERMS = (
@@ -213,3 +216,77 @@ def safe_attachment_path(root: Path | str, filename: str) -> Path:
     if candidate.parent != resolved_root:
         raise SafetyError("attachment path escapes the save directory")
     return candidate
+
+
+# --- 書き込みの検査（一括数・移動先・タグ） --------------------------------------------
+def check_batch(ids: object) -> list[str]:
+    """メッセージ ID の一覧を検査し、重複を順序を保って除いた一覧を返す（1〜50 件）。"""
+    if isinstance(ids, (str, bytes)) or not isinstance(ids, (list, tuple)):
+        raise SafetyError("message ids must be a list")
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in ids:
+        if not isinstance(item, str) or not item or _has_control_char(item):
+            raise SafetyError("invalid message id")
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    if not unique:
+        raise SafetyError("no message ids given")
+    if len(unique) > MAX_MESSAGES_PER_WRITE:
+        raise SafetyError(f"too many messages in one write (max {MAX_MESSAGES_PER_WRITE})")
+    return unique
+
+
+def _normalize_name(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).casefold().strip()
+
+
+def check_move_destination(folder: Any, allowlist: Iterable[str] | None = None) -> None:
+    """移動先を検査する。許可リスト方式（特殊フォルダは inbox と archives だけ）。
+
+    名前、またはパスのどれかの区切りが `DENIED_FOLDER_NAMES` に当たれば拒否する
+    （拒否対象のフォルダの子への移動も防ぐため、末尾だけでなく全区切りを見る）。
+    """
+    if folder is None:
+        raise SafetyError("destination folder not found")
+    for special_use in folder.special_use:
+        if special_use not in ALLOWED_MOVE_SPECIAL_USES:
+            raise SafetyError("destination folder is not allowed")
+    names = {_normalize_name(folder.name)}
+    names.update(_normalize_name(part) for part in _PATH_SEPARATORS.split(folder.path))
+    if names & DENIED_FOLDER_NAMES:
+        raise SafetyError("destination folder is not allowed")
+    if allowlist is not None and folder.path not in set(allowlist):
+        raise SafetyError("destination folder is not in the allowlist")
+
+
+def _check_tag_format(key: object) -> str:
+    if not isinstance(key, str) or not key:
+        raise SafetyError("invalid tag key")
+    if len(key) > MAX_TAG_KEY_LEN:
+        raise SafetyError("tag key is too long")
+    if key.startswith("\\"):
+        raise SafetyError("tag key must not start with a backslash")
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" or ch in '(){%*"]\\' for ch in key):
+        raise SafetyError("tag key has forbidden characters")
+    if key.lower() in DANGEROUS_TAG_KEYS:
+        raise SafetyError("tag key is not allowed")
+    return key
+
+
+def check_tags(tags: object, known_keys: Iterable[str]) -> list[str]:
+    """タグのキーを検査し、重複を除いた一覧を返す。1 つでも違反があれば全体を拒否する。"""
+    if isinstance(tags, (str, bytes)) or not isinstance(tags, (list, tuple)):
+        raise SafetyError("tags must be a list")
+    checked: list[str] = []
+    for key in tags:
+        value = _check_tag_format(key)
+        if value not in checked:
+            checked.append(value)
+    if not checked:
+        raise SafetyError("no tags given")
+    known = set(known_keys)
+    if any(key not in known for key in checked):
+        raise SafetyError("unknown tag key")
+    return checked
