@@ -255,6 +255,30 @@ async function collectMessages(list, limit, offset) {
   return out;
 }
 
+// Collect every message of a paged MessageList (same page cap as collectMessages).
+async function collectAllMessages(list) {
+  const out = [];
+  for (let page = 0; page < 2000 && list; page++) {
+    out.push(...(list.messages || []));
+    if (!list.id) break;
+    list = await messenger.messages.continueList(list.id);
+  }
+  return out;
+}
+
+// Newest first. Equal or missing dates keep their original order (Array.prototype.sort is stable).
+function newestFirst(messages) {
+  const time = (header) => {
+    const value = header.date ? new Date(header.date).getTime() : NaN;
+    return Number.isNaN(value) ? -Infinity : value;
+  };
+  return messages.slice().sort((a, b) => {
+    const ta = time(a);
+    const tb = time(b);
+    return ta === tb ? 0 : tb > ta ? 1 : -1;
+  });
+}
+
 function extractText(part) {
   const plain = [];
   const html = [];
@@ -319,8 +343,9 @@ defineOp("messages.list", async (args) => {
   const limit = clampInt(args.limit, 1, MAX_LIST_LIMIT, 20);
   const offset = clampInt(args.offset, 0, 1000000, 0);
   const folder = await getFolder(args.folder_id);
-  const messages = await collectMessages(await messenger.messages.list(folder.id), limit, offset);
-  return messages.map((header) => mapSummary(header, false));
+  // SPEC §6: newest first, then offset and limit. The folder order alone is not by date.
+  const all = newestFirst(await collectAllMessages(await messenger.messages.list(folder.id)));
+  return all.slice(offset, offset + limit).map((header) => mapSummary(header, false));
 });
 
 defineOp("messages.get", async (args) => {

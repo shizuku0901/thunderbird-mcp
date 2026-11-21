@@ -34,7 +34,7 @@ function makeEnv(opts = {}) {
   const headers = new Map();
   for (let id = 1; id <= 60; id++) {
     headers.set(id, {
-      id, subject: `Subject ${id}`, author: "a@example.com", date: "2026-11-20T09:00:00Z",
+      id, subject: `Subject ${id}`, author: "a@example.com", date: (opts.dates && opts.dates[id]) || "2026-11-20T09:00:00Z",
       read: false, flagged: false, tags: id === 2 ? ["work"] : [], folder: { id: "f-inbox" },
     });
   }
@@ -294,6 +294,24 @@ await scenario("reads return mapped data and never write", async () => {
     attachments.ok && attachments.result[0].part_name === "1.2" &&
     read.ok && read.result.data_b64 === "YWJj" && env.writes().length === 0
   );
+});
+// SPEC §6: messages.list returns newest first, and offset/limit apply after sorting.
+// The stub returns ids in ascending order, so id 60 is the newest only if the op sorts by date.
+await scenario("messages.list sorts newest first before offset and limit", async () => {
+  const dates = {};
+  for (let id = 1; id <= 60; id++) dates[id] = new Date(Date.UTC(2026, 10, 1) + id * 3600 * 1000).toISOString();
+  const env = makeEnv({ dates });
+  const top = await env.request("messages.list", { folder_id: "f-inbox", limit: 3, offset: 0 }, 6);
+  const paged = await env.request("messages.list", { folder_id: "f-inbox", limit: 2, offset: 1 }, 7);
+  return (
+    top.ok && top.result.map((m) => m.id).join(",") === "60,59,58" &&
+    paged.ok && paged.result.map((m) => m.id).join(",") === "59,58"
+  );
+});
+await scenario("messages.list keeps the original order for equal or missing dates", async () => {
+  const env = makeEnv({ dates: { 1: "2026-11-25T00:00:00Z" } });
+  const list = await env.request("messages.list", { folder_id: "f-inbox", limit: 3, offset: 0 }, 8);
+  return list.ok && list.result.map((m) => m.id).join(",") === "1,2,3";
 });
 await scenario("unknown message is reported as not found", async () => {
   const env = makeEnv();
