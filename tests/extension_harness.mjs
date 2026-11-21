@@ -33,6 +33,7 @@ function makeEnv(opts = {}) {
     { key: "$label1", tag: "Important", color: "#f00" },
     { key: "work", tag: "Work", color: "" },
     ...input.dollarKeys.map((key) => ({ key, tag: key, color: "" })),
+    { key: "c1" + String.fromCharCode(0x85) + "ctl", tag: "ctl", color: "" },
   ];
   const headers = new Map();
   for (let id = 1; id <= 60; id++) {
@@ -195,7 +196,8 @@ await scenario("J-3 unknown folder is not found and nothing moves", async () => 
 });
 
 // --- J-4: tag keys ----------------------------------------------------------------------------
-const badTagKeys = ["has space", "tab\tkey", "paren(", 'quote"', "brace{", "percent%", "star*", "", "x".repeat(65), "\\Seen", "a]b", "$other"];
+const NEL_KEY = "c1" + String.fromCharCode(0x85) + "ctl";
+const badTagKeys = ["has space", "tab\tkey", "paren(", 'quote"', "brace{", "percent%", "star*", "", "x".repeat(65), "\\Seen", "a]b", "$other", NEL_KEY];
 for (const key of [...badTagKeys, ...input.dollarKeys, "unknown-key"]) {
   await scenario(`J-4 refuses tag key ${JSON.stringify(key)}`, async () => {
     const env = makeEnv();
@@ -288,6 +290,7 @@ const badDrafts = {
   "bad bcc": { ...draft, bcc: ["bad\r\n@example.com"] },
   "21 recipients": { ...draft, to: Array.from({ length: 21 }, (_, i) => `u${i}@example.com`) },
   "non-string body": { ...draft, body: 5 },
+  "empty identity id": { ...draft, identity_id: "" },
 };
 for (const [name, args] of Object.entries(badDrafts)) {
   await scenario(`J-6 refuses draft: ${name}`, async () => {

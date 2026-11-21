@@ -129,7 +129,7 @@ function checkTagKeys(value, known) {
     if (typeof key !== "string" || key.length === 0 || key.length > MAX_TAG_KEY_LEN) {
       throw new Refusal("invalid tag key");
     }
-    if (key.startsWith("\\") || TAG_BAD_CHARS.test(key)) throw new Refusal("tag key has forbidden characters");
+    if (key.startsWith("\\") || TAG_BAD_CHARS.test(key) || hasControlChars(key)) throw new Refusal("tag key has forbidden characters");
     if (key.startsWith("$") && !STANDARD_LABEL_RE.test(key)) throw new Refusal("tag key is not allowed");
     if (!known.has(key)) throw new Refusal("unknown tag key");
     if (!keys.includes(key)) keys.push(key);
@@ -437,6 +437,7 @@ defineOp("drafts.create", async (args) => {
   if (typeof args.subject !== "string" || hasControlChars(args.subject)) throw new Refusal("invalid subject");
   if (typeof args.body !== "string" || args.body.includes("\u0000")) throw new Refusal("invalid body");
   const identityId = parseOptionalString(args.identity_id, "identity id");
+  if (identityId === "") throw new Refusal("invalid identity id");
 
   const details = { to, cc, bcc, subject: args.subject, plainTextBody: args.body, isPlainText: true };
   if (identityId) details.identityId = identityId;
