@@ -203,3 +203,19 @@ class MailService:
             self._journal("save_attachment", message_id=message_id, part_name=part_name, path=str(path))
             return {"path": str(path), "size": len(data)}
         raise safety.SafetyError("could not choose a free filename")
+
+    def mark_read(self, message_ids: list[str], read: bool = True) -> dict[str, Any]:
+        ids = safety.check_batch(message_ids)
+        if not isinstance(read, bool):
+            raise safety.SafetyError("read must be a boolean")
+        self._backend.set_read(ids, read)
+        self._journal("mark_read", message_ids=ids, read=read)
+        return {"updated": ids, "read": read}
+
+    def set_flagged(self, message_ids: list[str], flagged: bool = True) -> dict[str, Any]:
+        ids = safety.check_batch(message_ids)
+        if not isinstance(flagged, bool):
+            raise safety.SafetyError("flagged must be a boolean")
+        self._backend.set_flagged(ids, flagged)
+        self._journal("set_flagged", message_ids=ids, flagged=flagged)
+        return {"updated": ids, "flagged": flagged}
