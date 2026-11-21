@@ -15,7 +15,7 @@ from typing import Any
 
 from . import safety
 from .backend import MailBackend
-from .models import MessageSummary, SearchQuery
+from .models import DraftRequest, MessageSummary, SearchQuery
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +256,37 @@ class MailService:
             destination_folder_id=destination_folder_id,
         )
         return {"moved": ids, "destination_folder_id": destination_folder_id}
+
+    def create_draft(
+        self,
+        to: list[str],
+        subject: str,
+        body: str,
+        cc: list[str] | None = None,
+        bcc: list[str] | None = None,
+        identity_id: str | None = None,
+    ) -> dict[str, Any]:
+        request = DraftRequest(
+            to=to,
+            subject=subject,
+            body=body,
+            cc=() if cc is None else cc,
+            bcc=() if bcc is None else bcc,
+            identity_id=identity_id,
+        )
+        safety.check_draft(request)
+        result = self._backend.save_draft(
+            DraftRequest(
+                to=tuple(request.to),
+                subject=request.subject,
+                body=request.body,
+                cc=tuple(request.cc),
+                bcc=tuple(request.bcc),
+                identity_id=request.identity_id,
+            )
+        )
+        self._journal("create_draft", message_id=result.message_id, folder_id=result.folder_id)
+        return {"status": "saved_as_draft", "message_id": result.message_id, "folder_id": result.folder_id}
 
     def _source_folders(self, ids: list[str]) -> list[str | None]:
         """ジャーナル用に、移動元のフォルダ ID を調べる（ジャーナルが無効なら調べない）。"""
