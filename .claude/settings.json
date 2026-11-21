@@ -1,0 +1,106 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync)",
+      "Bash(uv sync *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run python -m compileall *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git log *)",
+      "Bash(git init)",
+      "PowerShell(uv sync)",
+      "PowerShell(uv sync *)",
+      "PowerShell(uv run pytest)",
+      "PowerShell(uv run pytest *)",
+      "PowerShell(uv run python -m compileall *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git log *)",
+      "PowerShell(git init)"
+    ],
+    "ask": [
+      "Bash(uv add *)",
+      "PowerShell(uv add *)",
+      "Bash(git clean *)",
+      "Bash(git restore *)",
+      "Bash(git checkout -- *)",
+      "PowerShell(git clean *)",
+      "PowerShell(git restore *)",
+      "PowerShell(git checkout -- *)"
+    ],
+    "deny": [
+      "Read(~/AppData/Roaming/Thunderbird/**)",
+      "Edit(~/AppData/Roaming/Thunderbird/**)",
+      "Read(~/AppData/Local/Thunderbird/**)",
+      "Edit(~/AppData/Local/Thunderbird/**)",
+      "Read(//c/Users/*/AppData/Roaming/Thunderbird/**)",
+      "Edit(//c/Users/*/AppData/Roaming/Thunderbird/**)",
+      "Read(//**/ImapMail/**)",
+      "Read(//**/*.msf)",
+      "Read(//**/*.mbox)",
+      "Read(//**/*.eml)",
+      "Read(~/AppData/Local/thunderbird-mcp/**)",
+      "Edit(~/AppData/Local/thunderbird-mcp/**)",
+      "Read(~/Downloads/thunderbird-mcp/**)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(reg *)",
+      "PowerShell(reg *)",
+      "PowerShell(Set-ItemProperty *)",
+      "PowerShell(New-ItemProperty *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "PowerShell(Invoke-WebRequest *)",
+      "PowerShell(Invoke-RestMethod *)",
+      "mcp__thunderbird",
+      "Bash(git push *)",
+      "Bash(git commit --amend *)",
+      "Bash(git commit --no-verify *)",
+      "Bash(git reset --hard *)",
+      "Bash(git rebase *)",
+      "Bash(git add -A *)",
+      "Bash(git add --all *)",
+      "Bash(git add . *)",
+      "PowerShell(git push *)",
+      "PowerShell(git commit --amend *)",
+      "PowerShell(git commit --no-verify *)",
+      "PowerShell(git reset --hard *)",
+      "PowerShell(git rebase *)",
+      "PowerShell(git add -A *)",
+      "PowerShell(git add --all *)",
+      "PowerShell(git add . *)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_guard.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_gate.py\"",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
