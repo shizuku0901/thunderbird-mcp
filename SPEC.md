@@ -75,12 +75,12 @@ class MailBackend(ABC):
 ```
 
 - 公開メソッドはこの 14 個に固定する（`tests/test_tool_allowlist.py` で検証）。
-- `models.py` に置く dataclass: `Account(id, name, type)`、`Folder(id, account_id, name, path, special_use: tuple[str, ...] = ())`、`Tag(key, name, color="")`、`AttachmentInfo(part_name, filename, content_type, size)`、`MessageSummary(id, folder_id, subject, author, date, read=False, flagged=False, tags=(), has_attachments=False)`、`MessageDetail(summary, body_text, attachments)`、`SearchQuery(text="", folder_id=None, unread_only=False, flagged_only=False, tag=None, limit=20)`、`DraftRequest(to, subject, body, cc=(), bcc=(), identity_id=None)`、`DraftResult(message_id, folder_id)`。
+- `models.py` に置く dataclass: `Account(id, name, type)`、`Folder(id, account_id, name, path, special_use: tuple[str, ...] = ())`、`Tag(key, name, color="")`、`AttachmentInfo(part_name, filename, content_type, size)`、`MessageSummary(id, folder_id, subject, author, date, read=False, flagged=False, tags=(), has_attachments=False)`、`MessageDetail(summary, body_text, attachments)`、`SearchQuery(text="", folder_id=None, unread_only=False, flagged_only=False, tag=None, limit=20, since=None, until=None)`（`since` と `until` は UTC に直した ISO 8601 の文字列）、`DraftRequest(to, subject, body, cc=(), bcc=(), identity_id=None)`、`DraftResult(message_id, folder_id)`。
 - `FakeBackend`（`backends/fake.py`）について:
   - 呼ばれたメソッド名を `calls: list[str]` に記録する。
   - 下書きは `drafts: list[DraftRequest]` に保存し、`special_use` に `SU_DRAFTS` を含む最初のフォルダの ID を返す。
   - テストの準備用に `seed_account`、`seed_folder`、`seed_tag`、`seed_message(summary, body_text="", attachments=())` を持つ。`attachments` は `(AttachmentInfo, bytes)` の並びで、これらの呼び出しは `calls` に記録しない。
-  - `search_messages` は件名の部分一致（大文字小文字を区別しない）で探す。
+  - `search_messages` は件名の部分一致（大文字小文字を区別しない）で探し、`since` 以降・`until` 以前（どちらも境界を含む）の日付に絞る。日付が空または読めないメッセージは、`since` か `until` を指定したときは除く。
   - `with_sample_data()` は合成データを入れたインスタンスを返す。禁止語は safety の定数から組み立てる。
 - `MailService(backend, attachment_root, *, max_body_chars=20_000, journal_path=None)` が、公開ツールと同名のメソッドを持つ。
 
@@ -90,7 +90,7 @@ class MailBackend(ABC):
 |---|---|---|---|---|
 | 1 | `list_accounts` | なし | `{"accounts": [...]}` | 読み取り |
 | 2 | `list_folders` | `account_id?` | `{"folders": [{id, account_id, name, path, special_use}]}` | 読み取り |
-| 3 | `search_messages` | `text=""`, `folder_id?`, `unread_only=false`, `flagged_only=false`, `tag?`, `limit=20`（50 を超えたら 50 にする） | `{"messages": [summary], "untrusted_fields": [...]}` | 読み取り |
+| 3 | `search_messages` | `text=""`, `folder_id?`, `unread_only=false`, `flagged_only=false`, `tag?`, `limit=20`（50 を超えたら 50 にする）, `since?`, `until?` | `{"messages": [summary], "untrusted_fields": [...]}` | 読み取り |
 | 4 | `list_messages` | `folder_id`, `limit=20`（最大 50）, `offset=0` | 同上 | 読み取り |
 | 5 | `get_message` | `message_id`, `max_body_chars?` | `{"message": {...}, "body": {untrusted, notice, content, truncated}, "untrusted_fields": [...]}` | 読み取り |
 | 6 | `list_attachments` | `message_id` | `{"attachments": [{part_name, filename, content_type, size}]}` | 読み取り |
@@ -105,6 +105,7 @@ class MailBackend(ABC):
 
 - summary の項目: `id`, `folder_id`, `subject`, `author`, `date`, `read`, `flagged`, `tags`, `has_attachments`。
 - `list_messages` は `date` の新しい順に並べ、同じ日時なら Thunderbird が返した順を保つ。そのうえで `offset` と `limit` を適用する。
+- `search_messages` の `since` と `until`: 日付で絞る。形式は時刻とタイムゾーン付きの ISO 8601（例 `2026-11-01T00:00:00+09:00`、`Z` も可）。日付だけ（例 `2026-11-01`）、タイムゾーンなし、読めない値、文字列以外は `refused` にする。`since` 以降、`until` 以前で、どちらも境界を含む。片方だけの指定もできる。`since` が `until` より後なら拒否する。特定の1日を調べるときは、同じ日の始まりと終わりを `since` と `until` に入れる。
 - `create_draft` の引数は上の 6 個に固定する。「すぐ出す」のようなフラグは持たない。
 
 ## 7. ブリッジ op 許可リスト（Python ↔ JS）
@@ -113,7 +114,7 @@ class MailBackend(ABC):
 |---|---|---|
 | `accounts.list` | `accounts.list()` | accountsRead |
 | `folders.list` | `folders.query()` または `accounts.list(true)` | accountsRead |
-| `messages.query` | `messages.query()` | messagesRead |
+| `messages.query` | `messages.query()`（`since` と `until` は `fromDate` と `toDate` に渡す。要実機確認） | messagesRead |
 | `messages.list` | `messages.list()` / `continueList()` | messagesRead |
 | `messages.get` | `messages.getFull()` | messagesRead |
 | `attachments.list` | `messages.listAttachments()` | messagesRead |
@@ -152,6 +153,7 @@ class MailBackend(ABC):
 | S-11 | 安全検査に違反したら `SafetyError` を投げ、backend は呼ばない。ツールのエラー文は `refused: <理由>` とし、メール由来の文字列を含めない |
 | S-12 | 書き込みは JSONL の操作ジャーナルに残す（時刻、ツール、ID、タグ）。本文と件名は書かない |
 | S-13 | 開発用の Claude Code では、実際の `mcp__thunderbird` ツールを deny にする |
+| S-14 | 日付の検査: `since` と `until` は、時刻とタイムゾーン付きの ISO 8601 の文字列だけを受け付ける。日付だけ、タイムゾーンなし、制御文字を含むもの、読めないもの、文字列以外、`since` が `until` より後のものは拒否する。通ったものは UTC に直して backend に渡す |
 
 **`safety.py` が公開する名前:**
 - 定数: `FORBIDDEN_TERMS`（小文字のリテラルのタプル）、`FORBIDDEN_IMPORTS`、`FORBIDDEN_PERMISSIONS`、`FORBIDDEN_MANIFEST_KEYS`、`ALLOWED_EXTENSION_PERMISSIONS`、`ALLOWED_TOOLS`（§6 の順のタプル）
@@ -159,7 +161,7 @@ class MailBackend(ABC):
 - 集合: `DANGEROUS_TAG_KEYS`
 - 上限: `MAX_MESSAGES_PER_WRITE=50`、`MAX_RECIPIENTS=20`、`MAX_TAG_KEY_LEN=64`、`MAX_FILENAME_LEN=200`、`MAX_ATTACHMENT_BYTES=25*1024*1024`、`DEFAULT_MAX_BODY_CHARS=20000`、`MAX_SEARCH_LIMIT=50`
 - マーカー: `UNTRUSTED_BEGIN`、`UNTRUSTED_END`
-- 関数: `class SafetyError(ValueError)`、`check_batch(ids)`、`check_tags(tags, known_keys)`、`check_draft(req)`、`sanitize_header(text, max_len=500)`、`wrap_untrusted(text, max_chars)`、`safe_attachment_path(root, filename)`（root がなければ作る）
+- 関数: `class SafetyError(ValueError)`、`check_batch(ids)`、`check_tags(tags, known_keys)`、`check_date_range(since, until)`（検査して UTC に直した `(since, until)` を返す）、`check_draft(req)`、`sanitize_header(text, max_len=500)`、`wrap_untrusted(text, max_chars)`、`safe_attachment_path(root, filename)`（root がなければ作る）
 
 ## 9. 信頼できない入力（メール由来のデータ）
 
@@ -198,6 +200,7 @@ claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird
 - AC-7: 本文を信頼できない入力として扱うこと
 - AC-8: stdout に JSON-RPC 以外を出さないこと
 - AC-9: 拡張マニフェストの権限
+- AC-10: `search_messages` の日付での絞り込み（境界を含むこと、不正な日付の拒否）
 
 **手動（Windows の実機で、人間が行う）:**
 - AC-W1: `register_native_host.ps1` を実行し、Thunderbird を再起動する。`health_check` が `ok: true` を返し、`thunderbird_version` と `draft_mode` が出る。
@@ -208,7 +211,7 @@ claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird
 
 ## 12. 未確認事項（実機で確認する）
 
-Windows の Thunderbird が読むレジストリキー、Native Messaging のメッセージの上限、`messages.saveMessage` の引数と必要な権限、`messagesUpdate` と `messagesTags` の権限名（ESR 140 と 153 以降）、`folders.query` と `tags.list` の有無、`.cmd` をホストとして起動できるか、asyncio の名前付きパイプ API、名前付きパイプの既定の ACL。
+Windows の Thunderbird が読むレジストリキー、Native Messaging のメッセージの上限、`messages.saveMessage` の引数と必要な権限、`messagesUpdate` と `messagesTags` の権限名（ESR 140 と 153 以降）、`folders.query` と `tags.list` の有無、`messages.query` が `fromDate` と `toDate` を受け付けるか（境界を含むか）、`.cmd` をホストとして起動できるか、asyncio の名前付きパイプ API、名前付きパイプの既定の ACL。
 
 ## 13. 外した機能の記録
 
