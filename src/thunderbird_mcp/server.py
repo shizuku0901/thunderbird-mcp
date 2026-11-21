@@ -8,8 +8,11 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import os
+import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import anyio.to_thread
@@ -104,3 +107,51 @@ def build_server(service: MailService) -> FastMCP:
             description=_TOOL_DESCRIPTIONS[name],
         )
     return server
+
+
+def _env_path(name: str, default: Path) -> Path:
+    value = os.environ.get(name)
+    return Path(value) if value else default
+
+
+def _build_backend() -> Any:
+    """環境変数で backend を選ぶ。動的 import は使わず、if 文で静的に選ぶ。"""
+    name = os.environ.get("THUNDERBIRD_MCP_BACKEND", "bridge").strip().lower()
+    if name == "fake":
+        from .backends.fake import FakeBackend
+
+        return FakeBackend.with_sample_data()
+    if name == "bridge":
+        from .backends.bridge import BridgeBackend
+
+        return BridgeBackend()
+    raise SystemExit(f"unknown THUNDERBIRD_MCP_BACKEND: {name!r} (use 'bridge' or 'fake')")
+
+
+def build_service_from_env() -> MailService:
+    home = Path.home()
+    local_app_data = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+    allowlist_raw = os.environ.get("THUNDERBIRD_MCP_MOVE_ALLOWLIST", "")
+    allowlist = [p.strip() for p in allowlist_raw.split(";") if p.strip()] or None
+    return MailService(
+        _build_backend(),
+        _env_path("THUNDERBIRD_MCP_ATTACHMENT_DIR", home / "Downloads" / "thunderbird-mcp"),
+        move_allowlist=allowlist,
+        journal_path=_env_path("THUNDERBIRD_MCP_JOURNAL", local_app_data / "thunderbird-mcp" / "journal.jsonl"),
+    )
+
+
+def main() -> None:
+    # ログは stderr だけに出す（標準出力は JSON-RPC 専用）
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    service = build_service_from_env()
+    logger.info("starting %s with backend %s", SERVER_NAME, os.environ.get("THUNDERBIRD_MCP_BACKEND", "bridge"))
+    build_server(service).run("stdio")
+
+
+if __name__ == "__main__":
+    main()
