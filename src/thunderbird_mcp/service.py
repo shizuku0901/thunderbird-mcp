@@ -5,8 +5,11 @@ server からは必ずこのクラスを通す（backend を直接呼ばない�
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -156,3 +159,47 @@ class MailService:
 
     def health_check(self) -> dict[str, Any]:
         return dict(self._backend.health())
+
+    # --- 書き込み系 -----------------------------------------------------------------
+    def _journal(self, tool: str, **fields: Any) -> None:
+        """操作ジャーナル（JSONL）に追記する。本文と件名は書かない。"""
+        if self._journal_path is None:
+            return
+        entry = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "tool": tool, **fields}
+        try:
+            self._journal_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._journal_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError:
+            logger.error("could not write the operation journal")
+
+    def save_attachment(self, message_id: str, part_name: str, filename: str | None = None) -> dict[str, Any]:
+        if not isinstance(message_id, str) or not isinstance(part_name, str):
+            raise safety.SafetyError("message_id and part_name must be strings")
+        info = next(
+            (a for a in self._backend.list_attachments(message_id) if a.part_name == part_name),
+            None,
+        )
+        if info is None:
+            raise KeyError(part_name)
+        if info.size > safety.MAX_ATTACHMENT_BYTES:
+            raise safety.SafetyError("attachment is too large")
+        if filename is not None:
+            name = filename
+        else:
+            name = info.filename or "attachment_" + re.sub(r"[^A-Za-z0-9.]", "_", part_name)
+        # 検査は読み出しの前に行い、不正な名前なら本体を読まない
+        safety.safe_attachment_path(self._attachment_root, name)
+        data = self._backend.read_attachment(message_id, part_name)
+        if len(data) > safety.MAX_ATTACHMENT_BYTES:
+            raise safety.SafetyError("attachment is too large")
+        for _ in range(100):
+            path = safety.safe_attachment_path(self._attachment_root, name)
+            try:
+                with open(path, "xb") as fh:
+                    fh.write(data)
+            except FileExistsError:
+                continue
+            self._journal("save_attachment", message_id=message_id, part_name=part_name, path=str(path))
+            return {"path": str(path), "size": len(data)}
+        raise safety.SafetyError("could not choose a free filename")
