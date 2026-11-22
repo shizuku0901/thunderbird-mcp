@@ -61,6 +61,8 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "remove_tags": "Remove existing tags from up to 50 messages. Unknown or unsafe tag keys are refused.",
     "create_draft": (
         "Save a new draft in the Drafts folder for the user to review in Thunderbird. "
+        "To reply, pass reply_to_message_id; omit `to` to derive recipients from the original "
+        "(reply_type: author or all), or pass recipients that are participants of the original. "
         "The draft is never transmitted by this server."
     ),
     "health_check": "Check the connection to Thunderbird and report the backend status.",

@@ -50,6 +50,7 @@ class FakeBackend(MailBackend):
         self._tags: dict[str, Tag] = {}
         self._messages: dict[str, MessageSummary] = {}
         self._bodies: dict[str, str] = {}
+        self._addresses: dict[str, dict[str, object]] = {}
         self._attachments: dict[str, list[tuple[AttachmentInfo, bytes]]] = {}
 
     # --- テストの準備用（calls には記録しない） -------------------------------------
@@ -67,9 +68,19 @@ class FakeBackend(MailBackend):
         summary: MessageSummary,
         body_text: str = "",
         attachments: Iterable[tuple[AttachmentInfo, bytes]] = (),
+        author_address: str = "",
+        reply_to: Iterable[str] = (),
+        to: Iterable[str] = (),
+        cc: Iterable[str] = (),
     ) -> None:
         self._messages[summary.id] = summary
         self._bodies[summary.id] = body_text
+        self._addresses[summary.id] = {
+            "author_address": author_address,
+            "reply_to": tuple(reply_to),
+            "to": tuple(to),
+            "cc": tuple(cc),
+        }
         self._attachments[summary.id] = list(attachments)
 
     @classmethod
@@ -161,7 +172,12 @@ class FakeBackend(MailBackend):
         self.calls.append("get_message")
         summary = self._messages[message_id]
         attachments = tuple(info for info, _ in self._attachments.get(message_id, []))
-        return MessageDetail(summary=summary, body_text=self._bodies.get(message_id, ""), attachments=attachments)
+        return MessageDetail(
+            summary=summary,
+            body_text=self._bodies.get(message_id, ""),
+            attachments=attachments,
+            **self._addresses.get(message_id, {}),
+        )
 
     def list_attachments(self, message_id: str) -> list[AttachmentInfo]:
         self.calls.append("list_attachments")
