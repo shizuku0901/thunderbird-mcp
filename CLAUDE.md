@@ -40,7 +40,7 @@ Claude が Thunderbird のメールを操作する MCP サーバー（Python 3.1
   1. `extension/manifest.json` の `version` を上げる。バグ修正などはパッチ（0.1.2 → 0.1.3）、機能追加はマイナー（0.1.3 → 0.2.0）。
   2. `.xpi` を作り直す。出力先は、リポジトリ直下の `TEMP/` フォルダーにする（`.gitignore` 済み。パソコンの `%TEMP%` ではない）。
      - `npx web-ext build --source-dir ./extension --artifacts-dir ./TEMP --overwrite-dest`
-     - または `uv run python scripts/build.py`（`scripts/build.py` も出力先を `TEMP/` にする）
+     - または `uv run python scripts/build_xpi.py`（`scripts/build_xpi.py` も出力先を `TEMP/` にする）
 - `.xpi` は手で編集しない。必ずソースから作り直す。
 - zip のルート直下に `manifest.json` が来ること。フォルダごと圧縮しない。
 - Windows 標準の `Compress-Archive` は使わない（パス区切りが `\` になり、壊れることがある）。
