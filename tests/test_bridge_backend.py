@@ -290,3 +290,53 @@ def test_service_checks_run_before_any_write_op_reaches_the_bridge(make, tmp_pat
     with pytest.raises(safety.SafetyError):
         service.add_tags(["11"], [bad_key])
     assert seen == ["tags.list"]
+
+
+# --- 返信の下書き（SPEC §7 の drafts.create、§5 の MessageDetail） ------------------------------
+def test_reply_draft_passes_the_original_id_only_when_given(make):
+    seen = []
+    backend = make(canned(seen))
+    backend.save_draft(DraftRequest(to=["a@example.com"], subject="s", body="b", reply_to_message_id="11"))
+    backend.save_draft(DraftRequest(to=["a@example.com"], subject="s", body="b"))
+    assert seen[0]["args"]["reply_to_message_id"] == "11"
+    assert "reply_to_message_id" not in seen[1]["args"]
+
+
+def test_get_message_converts_the_address_fields(make):
+    results = dict(RESULTS)
+    results["messages.get"] = {
+        "summary": SUMMARY,
+        "body_text": "Body",
+        "attachments": [],
+        "author_address": "a@example.com",
+        "reply_to": ["list@example.com"],
+        "to": ["me@example.com", "b@example.com"],
+        "cc": ["c@example.com"],
+    }
+    seen = []
+
+    def responder(request):
+        seen.append(request)
+        return {"id": request["id"], "ok": True, "result": results[request["op"]]}
+
+    detail = make(responder).get_message("11")
+    assert detail.author_address == "a@example.com"
+    assert detail.reply_to == ("list@example.com",)
+    assert detail.to == ("me@example.com", "b@example.com")
+    assert detail.cc == ("c@example.com",)
+
+
+def test_get_message_without_address_fields_gives_empty_ones(make):
+    detail = make(canned([])).get_message("11")
+    assert (detail.author_address, detail.reply_to, detail.to, detail.cc) == ("", (), (), ())
+
+
+@pytest.mark.parametrize("bad", [{"reply_to": "x@example.com"}, {"to": [1]}, {"cc": {"a": "b"}}, {"author_address": 5}])
+def test_get_message_with_malformed_address_fields_is_a_protocol_error(make, bad):
+    result = {"summary": SUMMARY, "body_text": "Body", "attachments": [], **bad}
+
+    def responder(request):
+        return {"id": request["id"], "ok": True, "result": result}
+
+    with pytest.raises(BridgeProtocolError):
+        make(responder).get_message("11")
