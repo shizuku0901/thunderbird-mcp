@@ -14,7 +14,7 @@ function record(name, ok, detail = "") {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const WRITE_APIS = ["messages.update", "messages.move", "compose.beginNew", "compose.saveMessage", "tabs.remove", "windows.remove"];
+const WRITE_APIS = ["messages.update", "messages.move", "compose.beginNew", "compose.beginReply", "compose.setComposeDetails", "compose.saveMessage", "tabs.remove", "windows.remove"];
 
 function makeEnv(opts = {}) {
   const calls = [];
@@ -36,6 +36,8 @@ function makeEnv(opts = {}) {
     headers.set(id, {
       id, subject: `Subject ${id}`, author: "a@example.com", date: (opts.dates && opts.dates[id]) || "2026-11-20T09:00:00Z",
       read: false, flagged: false, tags: id === 2 ? ["work"] : [], folder: { id: "f-inbox" },
+      recipients: id === 1 ? ["Me <me@example.com>", "b@example.com"] : [],
+      ccList: id === 1 ? ["Carol <carol@example.com>"] : [],
     });
   }
   const posted = [];
@@ -65,7 +67,11 @@ function makeEnv(opts = {}) {
         if (!headers.has(id)) throw new Error("no such message");
         return headers.get(id);
       },
-      getFull: async () => ({ contentType: "multipart/mixed", parts: [{ contentType: "text/plain", body: "Hello body" }] }),
+      getFull: async () => ({
+        contentType: "multipart/mixed",
+        headers: { "reply-to": ["List <list@example.com>"] },
+        parts: [{ contentType: "text/plain", body: "Hello body" }],
+      }),
       listAttachments: async () => [{ partName: "1.2", name: "a.txt", contentType: "text/plain", size: 3 }],
       getAttachmentFile: async (id, part) => { log("messages.getAttachmentFile", id, part); return file; },
       query: async (q) => { log("messages.query", q); return { id: null, messages: [...headers.values()] }; },
@@ -74,7 +80,18 @@ function makeEnv(opts = {}) {
       move: async (ids, folderId) => { log("messages.move", ids, folderId); },
       tags: { list: async () => tags },
     },
+    messengerUtilities: opts.noParser ? undefined : {
+      parseMailboxString: async (text) => {
+        const m = /^(?:(.*?)\s*<)?([^<>\s]+@[^<>\s]+)>?$/.exec(String(text).trim());
+        return m ? [{ name: m[1] || "", email: m[2] }] : [];
+      },
+    },
     compose: {
+      beginReply: async (id, ...rest) => { log("compose.beginReply", id, ...rest); return { id: 900, windowId: 901 }; },
+      setComposeDetails: async (tabId, details) => {
+        log("compose.setComposeDetails", tabId, details);
+        if (opts.setFails) throw new Error("set failed");
+      },
       beginNew: async (details) => { log("compose.beginNew", details); return { id: 900, windowId: 901 }; },
       saveMessage: async (tabId, options) => {
         log("compose.saveMessage", tabId, options);
@@ -270,6 +287,112 @@ await scenario("J-6 draft arguments take no extra switch", async () => {
   const begin = env.calls.find((c) => c[0] === "compose.beginNew");
   const allowed = new Set(["to", "cc", "bcc", "subject", "plainTextBody", "isPlainText", "identityId"]);
   return Object.keys(begin[1]).every((key) => allowed.has(key));
+});
+
+// --- J-8, J-9: reply drafts -------------------------------------------------------------------------
+const reply = { ...draft, to: ["a@example.com"], reply_to_message_id: "1" };
+await scenario("J-8 a reply opens the reply window without a reply type and places the checked values", async () => {
+  const env = makeEnv();
+  const response = await env.request("drafts.create", reply);
+  const names = env.calls.filter((c) => c[0].startsWith("compose.")).map((c) => c[0]);
+  const begin = env.calls.find((c) => c[0] === "compose.beginReply");
+  const set = env.calls.find((c) => c[0] === "compose.setComposeDetails");
+  const save = env.calls.find((c) => c[0] === "compose.saveMessage");
+  return (
+    response.ok === true && response.result.message_id === "777" &&
+    names.join(",") === "compose.beginReply,compose.setComposeDetails,compose.saveMessage" &&
+    begin.length === 2 && begin[1] === 1 &&
+    set[1] === 900 && JSON.stringify(set[2].to) === JSON.stringify(["a@example.com"]) &&
+    set[2].subject === "Hello" && set[2].plainTextBody === "line1\nline2" &&
+    JSON.stringify(save[2]) === JSON.stringify({ mode: "draft" })
+  );
+});
+await scenario("J-8 a reply does not use the new-message window", async () => {
+  const env = makeEnv();
+  await env.request("drafts.create", reply);
+  return !env.calls.some((c) => c[0] === "compose.beginNew");
+});
+await scenario("J-8 the extension does not derive recipients", async () => {
+  const env = makeEnv();
+  const response = await env.request("drafts.create", { ...reply, to: [] });
+  return refused(response) && env.writes().length === 0;
+});
+await scenario("J-8 reply details take only the checked keys", async () => {
+  const env = makeEnv();
+  await env.request("drafts.create", { ...reply, cc: ["c@example.com"], bcc: ["d@example.com"], identity_id: "id1", immediate: true });
+  const set = env.calls.find((c) => c[0] === "compose.setComposeDetails");
+  const allowed = new Set(["to", "cc", "bcc", "subject", "plainTextBody", "identityId"]);
+  return Object.keys(set[2]).every((key) => allowed.has(key)) && set[2].identityId === "id1";
+});
+for (const [name, id] of Object.entries({ "path-like id": "../1", "empty id": "", "number id": 1, "negative id": "-1" })) {
+  await scenario(`J-8 refuses the original id: ${name}`, async () => {
+    const env = makeEnv();
+    return refused(await env.request("drafts.create", { ...reply, reply_to_message_id: id })) && env.writes().length === 0;
+  });
+}
+await scenario("J-8 a missing original is not found and nothing is opened", async () => {
+  const env = makeEnv();
+  const response = await env.request("drafts.create", { ...reply, reply_to_message_id: "9999" });
+  return response.code === "not_found" && env.writes().length === 0;
+});
+await scenario("J-8 a reply is checked like any draft", async () => {
+  const env = makeEnv();
+  const bad = [
+    { ...reply, subject: "Hi\r\nBcc: evil@example.com" },
+    { ...reply, to: ["Alice <alice@example.com>"] },
+    { ...reply, to: Array.from({ length: 21 }, (_, i) => `u${i}@example.com`) },
+    { ...reply, bcc: ["bad\r\n@example.com"] },
+  ];
+  for (const args of bad) {
+    if (!refused(await env.request("drafts.create", args))) return false;
+  }
+  return env.writes().length === 0;
+});
+await scenario("J-8 a null original id means a normal draft", async () => {
+  const env = makeEnv();
+  const response = await env.request("drafts.create", { ...draft, reply_to_message_id: null });
+  return response.ok === true && env.calls.some((c) => c[0] === "compose.beginNew");
+});
+await scenario("J-9 the reply window is closed after saving", async () => {
+  const env = makeEnv();
+  await env.request("drafts.create", reply);
+  const close = env.calls.find((c) => c[0] === "tabs.remove");
+  return close && close[1] === 900;
+});
+await scenario("J-9 a reply window that cannot be closed is an error", async () => {
+  const env = makeEnv({ tabRemoveFails: true, windowRemoveFails: true });
+  const response = await env.request("drafts.create", reply);
+  return response.ok === false && response.code !== "refused";
+});
+await scenario("J-9 a failed placement closes the window and saves nothing", async () => {
+  const env = makeEnv({ setFails: true });
+  const response = await env.request("drafts.create", reply);
+  return (
+    response.ok === false && env.calls.some((c) => c[0] === "tabs.remove") &&
+    !env.calls.some((c) => c[0] === "compose.saveMessage")
+  );
+});
+await scenario("J-9 a failed save closes the reply window", async () => {
+  const env = makeEnv({ saveFails: true });
+  const response = await env.request("drafts.create", reply);
+  return response.ok === false && env.calls.some((c) => c[0] === "tabs.remove");
+});
+
+// --- messages.get: addresses for replies (relay only) -----------------------------------------------
+await scenario("messages.get relays bare addresses for replies", async () => {
+  const env = makeEnv();
+  const got = await env.request("messages.get", { message_id: "1" });
+  return (
+    got.ok && got.result.author_address === "a@example.com" &&
+    JSON.stringify(got.result.reply_to) === JSON.stringify(["list@example.com"]) &&
+    JSON.stringify(got.result.to) === JSON.stringify(["me@example.com", "b@example.com"]) &&
+    JSON.stringify(got.result.cc) === JSON.stringify(["carol@example.com"]) && env.writes().length === 0
+  );
+});
+await scenario("messages.get gives empty address lists when the parser is missing", async () => {
+  const env = makeEnv({ noParser: true });
+  const got = await env.request("messages.get", { message_id: "1" });
+  return got.ok && got.result.author_address === "" && got.result.reply_to.length === 0 && got.result.to.length === 0 && got.result.cc.length === 0;
 });
 
 // --- J-7: health ----------------------------------------------------------------------------------------

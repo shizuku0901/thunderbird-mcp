@@ -5,7 +5,7 @@
  *
  * Decisions are made on the Python side (safety.py / service.py). This file only
  * relays a fixed table of operations to the messenger API and re-checks the same
- * rules with allowlists (J-1 .. J-7 in SPEC section 7). It adds no other logic.
+ * rules with allowlists (J-1 .. J-9 in SPEC section 7). It adds no other logic.
  *
  * Mail-derived strings are returned as data and are never interpreted here.
  */
@@ -364,15 +364,44 @@ defineOp("messages.list", async (args) => {
   return all.slice(offset, offset + limit).map((header) => mapSummary(header, false));
 });
 
+// Reply support: relay bare addresses only. Parsing is done by Thunderbird itself; if the parser
+// is missing the lists are empty, and the Python side then refuses to derive recipients.
+async function bareAddresses(values) {
+  const parser = messenger.messengerUtilities && messenger.messengerUtilities.parseMailboxString;
+  if (typeof parser !== "function" || !Array.isArray(values)) return [];
+  const out = [];
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    try {
+      for (const mailbox of await parser.call(messenger.messengerUtilities, value)) {
+        if (mailbox && typeof mailbox.email === "string" && mailbox.email) out.push(mailbox.email);
+      }
+    } catch (error) {
+      // an unparsable value is dropped
+    }
+  }
+  return out;
+}
+
+function headerValues(full, name) {
+  const value = full && full.headers ? full.headers[name] : undefined;
+  return Array.isArray(value) ? value : [];
+}
+
 defineOp("messages.get", async (args) => {
   const id = parseId(args.message_id, "message id");
   const header = await getHeader(id);
   const full = await messenger.messages.getFull(id);
   const attachments = await messenger.messages.listAttachments(id);
+  const authors = await bareAddresses(header.author == null ? [] : [String(header.author)]);
   return {
     summary: mapSummary(header, attachments.length > 0),
     body_text: extractText(full),
     attachments: attachments.map(mapAttachment),
+    author_address: authors.length > 0 ? authors[0] : "",
+    reply_to: await bareAddresses(headerValues(full, "reply-to")),
+    to: await bareAddresses(header.recipients),
+    cc: await bareAddresses(header.ccList),
   };
 });
 
@@ -465,10 +494,30 @@ defineOp("drafts.create", async (args) => {
   const identityId = parseOptionalString(args.identity_id, "identity id");
   if (identityId === "") throw new Refusal("invalid identity id");
 
-  const details = { to, cc, bcc, subject: args.subject, plainTextBody: args.body, isPlainText: true };
-  if (identityId) details.identityId = identityId;
+  // J-8: a reply is opened for the original message, but the recipients, subject and body are
+  // exactly the values Python checked. This file derives nothing.
+  let originalId = null;
+  if (args.reply_to_message_id !== undefined && args.reply_to_message_id !== null) {
+    originalId = parseId(args.reply_to_message_id, "original message id");
+    await getHeader(originalId);
+  }
 
-  const tab = await messenger.compose.beginNew(details);
+  let tab;
+  if (originalId === null) {
+    const details = { to, cc, bcc, subject: args.subject, plainTextBody: args.body, isPlainText: true };
+    if (identityId) details.identityId = identityId;
+    tab = await messenger.compose.beginNew(details);
+  } else {
+    const details = { to, cc, bcc, subject: args.subject, plainTextBody: args.body };
+    if (identityId) details.identityId = identityId;
+    tab = await messenger.compose.beginReply(originalId);
+    try {
+      await messenger.compose.setComposeDetails(tab.id, details);
+    } catch (error) {
+      await closeComposeWindow(tab).catch(() => {});
+      throw error;
+    }
+  }
   let saved;
   try {
     // The only call that stores the draft: mode "draft".
