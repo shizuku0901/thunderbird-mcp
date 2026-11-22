@@ -242,20 +242,34 @@ class MailService:
 
     def create_draft(
         self,
-        to: list[str],
         subject: str,
         body: str,
+        to: list[str] | None = None,
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
         identity_id: str | None = None,
+        reply_to_message_id: str | None = None,
+        reply_type: str | None = None,
     ) -> dict[str, Any]:
+        warnings: list[str] = []
+        if reply_to_message_id is None:
+            if reply_type is not None:
+                raise safety.SafetyError("reply_type needs reply_to_message_id")
+            to_list = [] if to is None else to
+            cc_list = [] if cc is None else cc
+            bcc_list = [] if bcc is None else bcc
+        else:
+            to_list, cc_list, bcc_list, warnings = self._reply_recipients(
+                reply_to_message_id, to, cc, bcc, reply_type
+            )
         request = DraftRequest(
-            to=to,
+            to=to_list,
             subject=subject,
             body=body,
-            cc=() if cc is None else cc,
-            bcc=() if bcc is None else bcc,
+            cc=cc_list,
+            bcc=bcc_list,
             identity_id=identity_id,
+            reply_to_message_id=reply_to_message_id,
         )
         safety.check_draft(request)
         result = self._backend.save_draft(
@@ -266,7 +280,55 @@ class MailService:
                 cc=tuple(request.cc),
                 bcc=tuple(request.bcc),
                 identity_id=request.identity_id,
+                reply_to_message_id=request.reply_to_message_id,
             )
         )
-        self._journal("create_draft", message_id=result.message_id, folder_id=result.folder_id)
-        return {"status": "saved_as_draft", "message_id": result.message_id, "folder_id": result.folder_id}
+        journal: dict[str, Any] = {"message_id": result.message_id, "folder_id": result.folder_id}
+        if reply_to_message_id is not None:
+            journal["reply_to_message_id"] = reply_to_message_id
+        self._journal("create_draft", **journal)
+        return {
+            "status": "saved_as_draft",
+            "message_id": result.message_id,
+            "folder_id": result.folder_id,
+            "recipients": {"to": list(request.to), "cc": list(request.cc), "bcc": list(request.bcc)},
+            "warnings": warnings,
+            "untrusted_fields": [] if reply_to_message_id is None else ["recipients"],
+        }
+
+    def _reply_recipients(
+        self,
+        original_id: object,
+        to: list[str] | None,
+        cc: list[str] | None,
+        bcc: list[str] | None,
+        reply_type: str | None,
+    ) -> tuple[list[str], list[str], list[str], list[str]]:
+        """返信の宛先を決める（SPEC §6 の R-2 〜 R-6、R-8）。S-8 の検査は呼び出し側の check_draft が行う。"""
+        if to is not None and reply_type is not None:
+            raise safety.SafetyError("to and reply_type cannot be combined")
+        if not isinstance(original_id, str) or not original_id or safety.sanitize_header(original_id) != original_id:
+            raise safety.SafetyError("invalid reply_to_message_id")
+        try:
+            detail = self._backend.get_message(original_id)
+        except KeyError:
+            raise safety.SafetyError("original message not found") from None
+        cc_given = [] if cc is None else cc
+        bcc_given = [] if bcc is None else bcc
+        warnings: list[str] = []
+        if to is not None:
+            to_list: list[str] = list(to)
+            cc_list: list[str] = list(cc_given)
+            safety.check_reply_recipients(detail, DraftRequest(to=to_list, subject="", body="", cc=cc_list, bcc=bcc_given))
+            return to_list, cc_list, list(bcc_given), warnings
+        effective = "author" if reply_type is None else reply_type
+        to_list, cc_list = safety.derive_reply_recipients(detail, effective)
+        safety.check_reply_recipients(detail, DraftRequest(to=(), subject="", body="", cc=cc_given, bcc=bcc_given))
+        seen = {address.lower() for address in to_list + cc_list}
+        for address in cc_given:
+            if address.lower() not in seen:
+                seen.add(address.lower())
+                cc_list.append(address)
+        if effective == "author" and any(a.lower() != detail.author_address.strip().lower() for a in to_list):
+            warnings.append("reply_to_differs")
+        return to_list, cc_list, list(bcc_given), warnings

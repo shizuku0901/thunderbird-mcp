@@ -23,7 +23,7 @@ def test_draft_is_saved_only_into_drafts_folder(service, fake):
 
 def test_draft_signature_has_no_extra_switch(service):
     params = set(inspect.signature(service.create_draft).parameters)
-    assert params == {"to", "subject", "body", "cc", "bcc", "identity_id"}
+    assert params == {"subject", "body", "to", "cc", "bcc", "identity_id", "reply_to_message_id", "reply_type"}
 
 
 @pytest.mark.parametrize("subject", [

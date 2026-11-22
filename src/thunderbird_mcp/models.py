@@ -54,6 +54,11 @@ class MessageDetail:
     summary: MessageSummary
     body_text: str
     attachments: tuple[AttachmentInfo, ...] = ()
+    # 返信の宛先の導出に使う、素のアドレスだけ（summary.author は表示用のまま）
+    author_address: str = ""
+    reply_to: tuple[str, ...] = ()
+    to: tuple[str, ...] = ()
+    cc: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -76,6 +81,7 @@ class DraftRequest:
     cc: Sequence[str] = ()
     bcc: Sequence[str] = ()
     identity_id: str | None = None
+    reply_to_message_id: str | None = None
 
 
 @dataclass(frozen=True)
