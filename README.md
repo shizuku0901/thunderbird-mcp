@@ -64,11 +64,39 @@ $env:THUNDERBIRD_MCP_BACKEND="fake"; uv run python -m thunderbird_mcp.server
 
 ホストの登録と拡張のインストールは、人間が行います。手順は [docs/manual-acceptance.md](docs/manual-acceptance.md) にあります。**最初は、テスト用のアカウントとメールで試してください。**
 
-Claude Code に登録する例:
+### Claude Code に登録する
 
 ```text
 claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird-mcp run python -m thunderbird_mcp.server
 ```
+
+### Claude デスクトップに登録する
+
+Claude デスクトップは、設定ファイルに書いた MCP サーバーを、自分で起動します。
+
+1. Claude デスクトップの「設定」→「開発者」→「構成を編集」を開く（`%APPDATA%\Claude\claude_desktop_config.json` が開きます）。
+2. `mcpServers` に、次のように書く。`C:\\path\\to\\thunderbird-mcp` は、このリポジトリの場所に置き換えます。JSON の中では、`\` を `\\` と重ねて書きます。
+
+   ```json
+   {
+     "mcpServers": {
+       "thunderbird": {
+         "command": "uv",
+         "args": [
+           "--directory", "C:\\path\\to\\thunderbird-mcp",
+           "run", "python", "-m", "thunderbird_mcp.server"
+         ]
+       }
+     }
+   }
+   ```
+
+   - すでに `mcpServers` がある場合は、その中に `"thunderbird": { ... }` だけを足します。
+   - `uv` が見つからないと言われたら、PowerShell で `(Get-Command uv).Source` を実行し、出てきたフルパスを `command` に書きます。
+3. Claude デスクトップを**完全に終了して**（タスクトレイのアイコンからも終了）、起動し直す。
+4. 新しい会話で、ツールの一覧に `thunderbird` が出ること、`health_check` が `ok: true` を返すことを確かめる。
+
+うまくいかないときは、ログ（`%APPDATA%\Claude\logs\mcp-server-thunderbird.log`）を見ます。サーバーは標準出力に何も書かず、ログは標準エラーに出します。Thunderbird が起動していないと、`cannot connect to Thunderbird ...` というエラーになります（[docs/manual-acceptance.md](docs/manual-acceptance.md) の AC-W5）。
 
 ### 環境変数
 
