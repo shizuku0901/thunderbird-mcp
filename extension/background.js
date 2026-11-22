@@ -483,6 +483,17 @@ async function closeComposeWindow(tab) {
   }
 }
 
+// Escapes the checked body text for an HTML compose window (no judgment, only encoding).
+function bodyToHtml(text) {
+  const escape = (t) =>
+    t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((para) => "<p>" + escape(para).replace(/\n/g, "<br>") + "</p>")
+    .join("");
+}
+
 defineOp("drafts.create", async (args) => {
   const to = checkAddresses(args.to, "to");
   const cc = checkAddresses(args.cc === undefined || args.cc === null ? [] : args.cc, "cc");
@@ -508,10 +519,14 @@ defineOp("drafts.create", async (args) => {
     if (identityId) details.identityId = identityId;
     tab = await messenger.compose.beginNew(details);
   } else {
-    const details = { to, cc, bcc, subject: args.subject, plainTextBody: args.body };
+    const details = { to, cc, bcc, subject: args.subject };
     if (identityId) details.identityId = identityId;
     tab = await messenger.compose.beginReply(originalId);
     try {
+      // A reply window may be HTML, where plainTextBody is ignored and the body would stay empty.
+      const current = await messenger.compose.getComposeDetails(tab.id);
+      if (current && current.isPlainText) details.plainTextBody = args.body;
+      else details.body = bodyToHtml(args.body);
       await messenger.compose.setComposeDetails(tab.id, details);
     } catch (error) {
       await closeComposeWindow(tab).catch(() => {});

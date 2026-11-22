@@ -88,6 +88,10 @@ function makeEnv(opts = {}) {
     },
     compose: {
       beginReply: async (id, ...rest) => { log("compose.beginReply", id, ...rest); return { id: 900, windowId: 901 }; },
+      getComposeDetails: async (tabId) => {
+        log("compose.getComposeDetails", tabId);
+        return { isPlainText: !!opts.replyPlain, body: "<html><body><blockquote>quoted</blockquote></body></html>" };
+      },
       setComposeDetails: async (tabId, details) => {
         log("compose.setComposeDetails", tabId, details);
         if (opts.setFails) throw new Error("set failed");
@@ -300,12 +304,24 @@ await scenario("J-8 a reply opens the reply window without a reply type and plac
   const save = env.calls.find((c) => c[0] === "compose.saveMessage");
   return (
     response.ok === true && response.result.message_id === "777" &&
-    names.join(",") === "compose.beginReply,compose.setComposeDetails,compose.saveMessage" &&
+    names.join(",") === "compose.beginReply,compose.getComposeDetails,compose.setComposeDetails,compose.saveMessage" &&
     begin.length === 2 && begin[1] === 1 &&
     set[1] === 900 && JSON.stringify(set[2].to) === JSON.stringify(["a@example.com"]) &&
-    set[2].subject === "Hello" && set[2].plainTextBody === "line1\nline2" &&
+    set[2].subject === "Hello" && set[2].body === "<p>line1<br>line2</p>" && set[2].plainTextBody === undefined &&
     JSON.stringify(save[2]) === JSON.stringify({ mode: "draft" })
   );
+});
+await scenario("J-8 an HTML reply window gets the body as escaped HTML, not plainTextBody", async () => {
+  const env = makeEnv();
+  await env.request("drafts.create", { ...reply, body: "a <b>&\"x\"</b>\n\nz" });
+  const set = env.calls.find((c) => c[0] === "compose.setComposeDetails");
+  return set[2].body === "<p>a &lt;b&gt;&amp;&quot;x&quot;&lt;/b&gt;</p><p>z</p>" && set[2].plainTextBody === undefined;
+});
+await scenario("J-8 a plain-text reply window gets plainTextBody", async () => {
+  const env = makeEnv({ replyPlain: true });
+  await env.request("drafts.create", reply);
+  const set = env.calls.find((c) => c[0] === "compose.setComposeDetails");
+  return set[2].plainTextBody === "line1\nline2" && set[2].body === undefined;
 });
 await scenario("J-8 a reply does not use the new-message window", async () => {
   const env = makeEnv();
@@ -321,7 +337,7 @@ await scenario("J-8 reply details take only the checked keys", async () => {
   const env = makeEnv();
   await env.request("drafts.create", { ...reply, cc: ["c@example.com"], bcc: ["d@example.com"], identity_id: "id1", immediate: true });
   const set = env.calls.find((c) => c[0] === "compose.setComposeDetails");
-  const allowed = new Set(["to", "cc", "bcc", "subject", "plainTextBody", "identityId"]);
+  const allowed = new Set(["to", "cc", "bcc", "subject", "plainTextBody", "body", "identityId"]);
   return Object.keys(set[2]).every((key) => allowed.has(key)) && set[2].identityId === "id1";
 });
 for (const [name, id] of Object.entries({ "path-like id": "../1", "empty id": "", "number id": 1, "negative id": "-1" })) {
