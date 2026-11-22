@@ -164,6 +164,18 @@ class BridgeBackend(MailBackend):
         )
 
     @staticmethod
+    def _address_list(value: Any) -> tuple[str, ...]:
+        if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
+            raise TypeError("address list")
+        return tuple(value)
+
+    @staticmethod
+    def _address(value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("address")
+        return value
+
+    @staticmethod
     def _tag(d: dict[str, Any]) -> Tag:
         return Tag(key=str(d["key"]), name=str(d["name"]), color=str(d.get("color", "")))
 
@@ -204,6 +216,10 @@ class BridgeBackend(MailBackend):
                 summary=self._summary(r["summary"]),
                 body_text=str(r["body_text"]),
                 attachments=tuple(self._attachment(a) for a in r.get("attachments", [])),
+                author_address=self._address(r.get("author_address", "")),
+                reply_to=self._address_list(r.get("reply_to", [])),
+                to=self._address_list(r.get("to", [])),
+                cc=self._address_list(r.get("cc", [])),
             )
 
         return self._convert(build, self._call("messages.get", {"message_id": message_id}))
@@ -244,6 +260,8 @@ class BridgeBackend(MailBackend):
             "body": draft.body,
             "identity_id": draft.identity_id,
         }
+        if draft.reply_to_message_id is not None:
+            args["reply_to_message_id"] = draft.reply_to_message_id
         result = self._call("drafts.create", args)
         return self._convert(lambda r: DraftResult(message_id=str(r["message_id"]), folder_id=str(r["folder_id"])), result)
 
