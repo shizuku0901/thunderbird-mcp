@@ -104,6 +104,9 @@ DANGEROUS_TAG_KEYS = frozenset({
     "\\deleted",
 })
 
+# --- 返信種別 ----------------------------------------------------------------------
+REPLY_TYPES = ("author", "all")
+
 # --- 上限 --------------------------------------------------------------------------
 MAX_MESSAGES_PER_WRITE = 50
 MAX_RECIPIENTS = 20
@@ -359,3 +362,66 @@ def check_draft(req: Any) -> None:
         not isinstance(identity_id, str) or not identity_id or _has_header_unsafe_char(identity_id)
     ):
         raise SafetyError("invalid identity id")
+
+
+# --- 返信の宛先（SPEC §6 の R-4、R-5、§9 の U-7） --------------------------------------
+def _usable_origin_addresses(values: object) -> list[str]:
+    """元メール由来のアドレスを整える。制御文字を除き、素のアドレスでないものは捨てる。"""
+    if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple)):
+        return []
+    usable: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = "".join(
+            ch for ch in value
+            if not (unicodedata.category(ch) == "Cc" or ch in _LINE_BREAKS or ch in _BIDI_CONTROLS)
+        )
+        if len(cleaned) <= 254 and _ADDRESS_RE.fullmatch(cleaned) is not None:
+            usable.append(cleaned)
+    return usable
+
+
+def _dedupe_addresses(addresses: Iterable[str], seen: set[str]) -> list[str]:
+    """大文字小文字を区別せずに重複を除く。最初の表記を残し、seen に追記する。"""
+    unique: list[str] = []
+    for address in addresses:
+        key = address.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(address)
+    return unique
+
+
+def derive_reply_recipients(detail: Any, reply_type: object) -> tuple[list[str], list[str]]:
+    """元メールから返信の宛先 `(to, cc)` を導出する（R-4）。
+
+    author は reply_to があればそれ、なければ差出人。all は author の宛先に元の to を足して
+    to に、元の cc を cc に入れる。自分のアドレスは除かない。宛先が 0 件なら拒否する。
+    """
+    if not isinstance(reply_type, str) or reply_type not in REPLY_TYPES:
+        raise SafetyError("invalid reply type")
+    reply_to = _usable_origin_addresses(detail.reply_to)
+    author = _usable_origin_addresses([detail.author_address])
+    seen: set[str] = set()
+    to = _dedupe_addresses(reply_to or author, seen)
+    cc: list[str] = []
+    if reply_type == "all":
+        to += _dedupe_addresses(_usable_origin_addresses(detail.to), seen)
+        cc = _dedupe_addresses(_usable_origin_addresses(detail.cc), seen)
+    if not to:
+        raise SafetyError("no usable recipient in the original message")
+    return to, cc
+
+
+def check_reply_recipients(detail: Any, req: Any) -> None:
+    """指定された to・cc・bcc が、元メールの参加者に含まれることを確かめる（R-5）。"""
+    participants = {
+        address.lower()
+        for values in (detail.reply_to, detail.to, detail.cc, [detail.author_address])
+        for address in _usable_origin_addresses(values)
+    }
+    for label, addresses in (("to", req.to), ("cc", req.cc), ("bcc", req.bcc)):
+        for address in _check_addresses(addresses, label):
+            if address.lower() not in participants:
+                raise SafetyError(f"recipient in {label} is not a participant of the original message")
