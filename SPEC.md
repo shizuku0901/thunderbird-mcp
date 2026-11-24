@@ -234,7 +234,7 @@ claude mcp add thunderbird --scope user -- uv --directory C:\path\to\thunderbird
 
 ## 12. 未確認事項（実機で確認する）
 
-Windows の Thunderbird が読むレジストリキー、Native Messaging のメッセージの上限、`messages.saveMessage` の引数と必要な権限、`messagesUpdate` と `messagesTags` の権限名（ESR 140 と 153 以降）、`folders.query` と `tags.list` の有無、`messages.query` が `fromDate` と `toDate` を受け付けるか（境界を含むか）、`.cmd` をホストとして起動できるか、asyncio の名前付きパイプ API、名前付きパイプの既定の ACL。返信の下書きについて、`compose.beginReply` が返信種別の引数なしで使えるか、`compose.setComposeDetails` で宛先・件名・本文を置き換えられるか（引用付きの本文を置き換えたときの見え方）、保存した下書きに `In-Reply-To` と `References` が付いてスレッドに繋がるか、元メールのヘッダーから `Reply-To`・`To`・`Cc` のアドレスを素のアドレスで取れるか、`compose.beginReply` に必要な権限。
+Windows の Thunderbird が読むレジストリキー、Native Messaging のメッセージの上限、`messages.saveMessage` の引数と必要な権限、`messagesUpdate` と `messagesTags` の権限名（ESR 140 と 153 以降）、`folders.query` と `tags.list` の有無、`messages.query` が `fromDate` と `toDate` を受け付けるか（境界を含むか）、`.cmd` をホストとして起動できるか、asyncio の名前付きパイプ API、名前付きパイプの既定の ACL。返信の下書きについて、`compose.beginReply` が返信種別の引数なしで使えるか、`compose.setComposeDetails` で宛先・件名・本文を置き換えられるか（引用付きの本文を置き換えたときの見え方）、保存した下書きに `In-Reply-To` と `References` が付いてスレッドに繋がるか、元メールのヘッダーから `Reply-To`・`To`・`Cc` のアドレスを素のアドレスで取れるか、`compose.beginReply` に必要な権限。配布について、未署名の `.xpi` を Thunderbird 140 の通常版で「ファイルからインストール」できるか、`update_url` による自動更新（「アドオンの更新を確認」を含む）が働くか（§14）。
 
 ## 13. 外した機能の記録
 
@@ -264,3 +264,13 @@ Windows の Thunderbird が読むレジストリキー、Native Messaging のメ
   - 送信系の経路は増やさない。保存後の `status` は `saved_as_draft` のままにする。
 - **決めていない点:** 引用の扱い、自分のアドレスの除外（`Account` に identity のアドレスを足す案）、`bcc` に自分を入れる使い方。実機の確認（§12、AC-W6）のあとで決める。
 - **戻すとき:** この項を取り消し、§5、§6、§7、§8、§9、§11、§12 の返信に関する記述を外す。
+
+## 14. 配布と自動更新
+
+- **配布:** 拡張の `.xpi` は GitHub Release の添付ファイルで配る。`.xpi` は GitHub Actions が、リポジトリのソースから作る（手元で作ったものは配らない）。
+- **自動更新:** `extension/manifest.json` の `browser_specific_settings.gecko.update_url` に `https://github.com/shizuku0901/thunderbird-mcp/releases/latest/download/updates.json` を置く。Release ごとに `updates.json`（version、`update_link`、`update_hash`（sha256）、`strict_min_version`）を添付する。作るのは `scripts/make_update_manifest.py`。
+- **Release の作り方:** `.github/workflows/release.yml` が、main への push のたびに `manifest.json` の version を読む。その version の Release がなければ、テスト → `.xpi` のビルド → `updates.json` の作成 → タグ付き Release の公開、を行う。version を上げていないマージでは何もしない。タグは人間が打たない。マージは人間が行う。
+- **変えないもの:** アドオン ID（変えると別のアドオンになり、更新が繋がらない）。権限（`update_url` は権限ではなく、`safety.ALLOWED_EXTENSION_PERMISSIONS` の範囲は変わらない）。
+- **範囲外:** Python のサーバーとネイティブホストの登録は、自動更新しない。
+- **署名:** `.xpi` は Mozilla の署名なしで配る。Thunderbird が未署名の `.xpi` を受け付ける前提は、§12 の未確認事項として実機で確かめる。受け付けない場合は、addons.thunderbird.net への掲載に切り替える（要承認、ID の変更を伴う）。
+- **出力先:** ビルドの出力先は `dist/`（`.gitignore` 済み、追跡しない）。

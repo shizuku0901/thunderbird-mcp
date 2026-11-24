@@ -1,0 +1,71 @@
+name: release
+
+# main に push（= PR のマージ）されたとき、manifest.json の version に対応する
+# Release がまだなければ、テスト → ビルド → タグ付き Release の公開までを行う。
+# version を上げていないマージでは何もしない。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from manifest
+        id: ver
+        run: |
+          version=$(python -c "import json; print(json.load(open('extension/manifest.json', encoding='utf-8'))['version'])")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: check
+        run: |
+          if gh release view "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.ver.outputs.version }} is already released; nothing to do."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        if: steps.check.outputs.already == 'false'
+
+      - name: Install dependencies
+        if: steps.check.outputs.already == 'false'
+        run: uv sync
+
+      - name: Run tests
+        if: steps.check.outputs.already == 'false'
+        run: uv run pytest -q
+
+      - name: Build xpi
+        if: steps.check.outputs.already == 'false'
+        run: uv run python scripts/build_xpi.py
+
+      - name: Build update manifest
+        if: steps.check.outputs.already == 'false'
+        run: uv run python scripts/make_update_manifest.py "$GITHUB_REPOSITORY"
+
+      - name: Create tagged release
+        if: steps.check.outputs.already == 'false'
+        run: >
+          gh release create "v${{ steps.ver.outputs.version }}"
+          dist/*.xpi dist/updates.json
+          --target "$GITHUB_SHA"
+          --title "v${{ steps.ver.outputs.version }}"
+          --generate-notes

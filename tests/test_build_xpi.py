@@ -1,4 +1,4 @@
-"""scripts/build_xpi.py を、偽の extension/ で確かめる（実際の extension/ や TEMP/ は触らない）。"""
+"""scripts/build_xpi.py を、偽の extension/ で確かめる（実際の extension/ や dist/ は触らない）。"""
 from __future__ import annotations
 
 import hashlib
