@@ -64,6 +64,18 @@ $env:THUNDERBIRD_MCP_BACKEND="fake"; uv run python -m thunderbird_mcp.server
 
 ホストの登録と拡張のインストールは、人間が行います。手順は [docs/manual-acceptance.md](docs/manual-acceptance.md) にあります。**最初は、テスト用のアカウントとメールで試してください。**
 
+### 拡張を Release から入れる（自動更新つき）
+
+拡張（`.xpi`）は、GitHub の [Releases](https://github.com/shizuku0901/thunderbird-mcp/releases) で配っています。
+
+1. 最新の Release から `thunderbird-mcp-bridge-X.Y.Z.xpi` をダウンロードする。
+2. Thunderbird の「アドオンとテーマ」→ 歯車 →「ファイルからアドオンをインストール」で選ぶ。
+3. 以後は、新しい Release が出ると、Thunderbird が約1日ごとに確認して自動で更新します。すぐ確かめるときは、歯車 →「アドオンの更新を確認」。
+
+- 自動更新されるのは拡張だけです。Python のサーバーとホストの登録は、別に更新してください。Release のノートに「サーバーも更新」とあるときは、そのとおりにします。
+- 0.3.0 より前の版には自動更新の設定がないため、0.3.0 だけは手で入れ直してください。
+- この `.xpi` は Mozilla の署名がありません。ソースは `extension/` にあり、`uv run python scripts/build_xpi.py` で同じ `.xpi` を作れます（`dist/` に出力）。
+
 ### Claude Code に登録する
 
 ```text
