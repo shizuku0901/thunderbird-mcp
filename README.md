@@ -1,6 +1,6 @@
 # thunderbird-mcp
 
-[![Latest release](https://img.shields.io/github/v/release/shizuku0901/thunderbird-mcp)](https://github.com/shizuku0901/thunderbird-mcp/releases/latest) [![Release date](https://img.shields.io/github/release-date/shizuku0901/thunderbird-mcp)](https://github.com/shizuku0901/thunderbird-mcp/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/shizuku0901/thunderbird-mcp)](https://github.com/shizuku0901/thunderbird-mcp/releases/latest) [![Release date](https://img.shields.io/github/release-date/shizuku0901/thunderbird-mcp)](https://github.com/shizuku0901/thunderbird-mcp/releases/latest) [![CI](https://github.com/shizuku0901/thunderbird-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shizuku0901/thunderbird-mcp/actions/workflows/ci.yml)
 
 Windows で起動中の Thunderbird のメールを、Claude（MCP クライアント）が**検索・閲覧・整理し、下書きを作れる**ようにする MCP サーバーです。
 
