@@ -38,12 +38,12 @@ Claude が Thunderbird のメールを操作する MCP サーバー（Python 3.1
 ## アドオンのビルド・リリース
 - `extension/` 配下のコードを編集したら、作業の最後に必ず次の2つを行う。
   1. `extension/manifest.json` の `version` を上げる。バグ修正などはパッチ（0.1.2 → 0.1.3）、機能追加はマイナー（0.1.3 → 0.2.0）。
-  2. `.xpi` を作り直す。出力先は、リポジトリ直下の `TEMP/` フォルダーにする（`.gitignore` 済み。パソコンの `%TEMP%` ではない）。
-     - `npx web-ext build --source-dir ./extension --artifacts-dir ./TEMP --overwrite-dest`
-     - または `uv run python scripts/build_xpi.py`（`scripts/build_xpi.py` も出力先を `TEMP/` にする）
+  2. `.xpi` を作り直す。出力先は、リポジトリ直下の `dist/` フォルダーにする（`.gitignore` 済み。パソコンの `%TEMP%` ではない）。
+     - `npx web-ext build --source-dir ./extension --artifacts-dir ./dist --overwrite-dest`
+     - または `uv run python scripts/build_xpi.py`（`scripts/build_xpi.py` も出力先を `dist/` にする）
 - `.xpi` は手で編集しない。必ずソースから作り直す。
 - zip のルート直下に `manifest.json` が来ること。フォルダごと圧縮しない。
 - Windows 標準の `Compress-Archive` は使わない（パス区切りが `\` になり、壊れることがある）。
 - 開発中の動作確認は、Thunderbird の「一時的なアドオンを読み込む」で `extension/manifest.json` を指定し、再読み込みで反映する。この間は `.xpi` を作らなくてよい。
-- 作り終えたら、新しい `version` と、`TEMP/` に作った `.xpi` のファイル名（フルパス）を報告する。
+- 作り終えたら、新しい `version` と、`dist/` に作った `.xpi` のファイル名（フルパス）を報告する。
 - `.xpi` のインストールは人間が行う（「絶対ルール」のとおり）。

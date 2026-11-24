@@ -1,4 +1,4 @@
-"""Build the Thunderbird extension (.xpi) from extension/ into the repo-local TEMP/ folder (git-ignored).
+"""Build the Thunderbird extension (.xpi) from extension/ into the repo-local dist/ folder (git-ignored).
 
 The .xpi is always rebuilt from source. manifest.json sits at the zip root and
 entry names use forward slashes. Zip timestamps are fixed so builds are reproducible.
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_DIR = ROOT / "extension"
-OUT_DIR = ROOT / "TEMP"
+OUT_DIR = ROOT / "dist"
 
 SKIP_NAMES = {".DS_Store", "Thumbs.db"}
 SKIP_DIRS = {"__pycache__", "node_modules", ".git"}
