@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Thunderbird MCP Bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Thin relay between a local MCP server and Thunderbird. It reads, flags, tags and drafts mail; it cannot remove or transmit mail.",
   "browser_specific_settings": {
     "gecko": {
